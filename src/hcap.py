@@ -17,9 +17,10 @@ class error(Exception):
 REQ_HDR=0x52
 SCAN_CHAR=0x7e
 
-def crc16_ccitt(buf):
+def crc16_ccitt(buf, start, end):
     crc = 0xffff
-    for data in buf:
+    for pos in range(start, end):
+        data = buf[pos]
         data ^= crc & 0xff
         data ^= (data & 0x0f) << 4
         crc = ((data << 8) | (crc >> 8)) ^ (data >> 4) ^ (data << 3)
@@ -55,14 +56,17 @@ class SerialHandler:
     def read_data(self, read_finish):
         self.read_finish = read_finish
         data = self.data
+        dpos = 0
         msglen = 0
         while 1:
-            if len(data) < msglen + 6:
+            if len(data) - dpos < msglen + 6:
+                data[:dpos] = []
+                dpos = 0
                 curtime = time.time()
                 if curtime >= self.read_finish:
                     return
                 # Read data
-                d = self.ser.read(4096)
+                d = self.ser.read(64 * 1024 * 1024)
                 data.extend(d)
                 continue
             if self.need_scan:
@@ -72,27 +76,27 @@ class SerialHandler:
                     drop = sc + 1
                     self.need_scan = False
                 self._warn("Discard %d bytes" % (drop,))
-                data[:drop] = []
+                dpos += drop
                 continue
-            msghdr = data[0]
-            msgseq = data[1]
-            msglen = data[2] * 4
+            msghdr = data[dpos]
+            msgseq = data[dpos+1]
+            msglen = data[dpos+2] * 4
             if msghdr & 0xf0 == 0x60:
-                if len(data) < msglen + 6:
+                if len(data) - dpos < msglen + 6:
                     # Need more data
                     continue
-                msgcrc = list(data[msglen+3:msglen+5])
-                msgterm = data[msglen+5]
+                msgcrc = list(data[dpos+msglen+3:dpos+msglen+5])
+                msgterm = data[dpos+msglen+5]
                 if (msgterm == SCAN_CHAR
-                    and crc16_ccitt(data[:msglen+3]) == msgcrc):
+                    and crc16_ccitt(data, dpos, dpos+msglen+3) == msgcrc):
                     # Got valid response
                     if msgseq != (self.rx_seq + 1) & 0x3f:
                         if not self.no_seq_warnings:
                             self._warn("Receive sequence mismatch (%d vs %d)"
                                        % (msgseq, self.rx_seq))
                     self.rx_seq = msgseq
-                    msgdata = data[3:msglen+3]
-                    data[:msglen+6] = []
+                    msgdata = data[dpos+3:dpos+msglen+3]
+                    dpos += msglen+6
                     msglen = 0
                     # Process data in callback
                     hdlr = self.handlers.get(msghdr, self._default_stream)
@@ -104,7 +108,7 @@ class SerialHandler:
     def _build_message(self, tx_seq, is_write, addr, val):
         msg = [REQ_HDR, tx_seq & 0x3f, 0x01,
                is_write, addr & 0xff, (addr >> 8) & 0xff, val & 0xff]
-        msg.extend(crc16_ccitt(msg) + [SCAN_CHAR])
+        msg.extend(crc16_ccitt(msg, 0, len(msg)) + [SCAN_CHAR])
         return bytes(bytearray(msg))
     def _handle_response(self, msgdata):
         # Got response to request
