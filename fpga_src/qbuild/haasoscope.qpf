@@ -1,0 +1,5 @@
+# This is the main "Quartus Project File" used by the Quartus software.
+
+QUARTUS_VERSION = "22.1"
+DATE = "23:41:22  December 03, 2022"
+PROJECT_REVISION = "haasoscope"

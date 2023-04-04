@@ -1,0 +1,6 @@
+This directory contains code from:
+https://github.com/ZipCPU/dbgbus/tree/master/bench/rtl
+version ba6b1e3b9f601f7c4d68109018d025de9fb2aeb8.
+
+The code has been modified so that it compiles with the Quartus
+software.  See the uart.patch file for the changes.

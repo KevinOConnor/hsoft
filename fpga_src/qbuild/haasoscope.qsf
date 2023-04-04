@@ -1,0 +1,141 @@
+# This is the main "Quartus Settings File" used by the Quartus
+# software.  It is read/written by the Quartus software.
+
+set_global_assignment -name FAMILY "MAX 10"
+set_global_assignment -name DEVICE 10M08SAE144C8G
+set_global_assignment -name TOP_LEVEL_ENTITY haasoscope
+set_global_assignment -name ORIGINAL_QUARTUS_VERSION 22.1STD.0
+set_global_assignment -name PROJECT_CREATION_TIME_DATE "23:41:22  DECEMBER 03, 2022"
+set_global_assignment -name LAST_QUARTUS_VERSION "22.1std.0 Lite Edition"
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name MIN_CORE_JUNCTION_TEMP 0
+set_global_assignment -name MAX_CORE_JUNCTION_TEMP 85
+set_global_assignment -name ERROR_CHECK_FREQUENCY_DIVISOR 256
+set_global_assignment -name EDA_SIMULATION_TOOL "Questa Intel FPGA (Verilog)"
+set_global_assignment -name EDA_TIME_SCALE "1 ps" -section_id eda_simulation
+set_global_assignment -name EDA_OUTPUT_DATA_FORMAT "VERILOG HDL" -section_id eda_simulation
+set_global_assignment -name EDA_GENERATE_FUNCTIONAL_NETLIST OFF -section_id eda_board_design_timing
+set_global_assignment -name EDA_GENERATE_FUNCTIONAL_NETLIST OFF -section_id eda_board_design_symbol
+set_global_assignment -name EDA_GENERATE_FUNCTIONAL_NETLIST OFF -section_id eda_board_design_signal_integrity
+set_global_assignment -name EDA_GENERATE_FUNCTIONAL_NETLIST OFF -section_id eda_board_design_boundary_scan
+set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id Top
+set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id Top
+set_global_assignment -name PARTITION_COLOR 16764057 -section_id Top
+set_global_assignment -name ENABLE_OCT_DONE OFF
+set_global_assignment -name USE_CONFIGURATION_DEVICE ON
+set_global_assignment -name CRC_ERROR_OPEN_DRAIN OFF
+set_global_assignment -name STRATIX_DEVICE_IO_STANDARD "3.3-V LVTTL"
+set_global_assignment -name OUTPUT_IO_TIMING_NEAR_END_VMEAS "HALF VCCIO" -rise
+set_global_assignment -name OUTPUT_IO_TIMING_NEAR_END_VMEAS "HALF VCCIO" -fall
+set_global_assignment -name OUTPUT_IO_TIMING_FAR_END_VMEAS "HALF SIGNAL SWING" -rise
+set_global_assignment -name OUTPUT_IO_TIMING_FAR_END_VMEAS "HALF SIGNAL SWING" -fall
+set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
+set_global_assignment -name POWER_PRESET_COOLING_SOLUTION "NO HEAT SINK WITH STILL AIR"
+set_global_assignment -name POWER_BOARD_THERMAL_MODEL TYPICAL
+set_global_assignment -name FLOW_ENABLE_POWER_ANALYZER ON
+set_global_assignment -name POWER_DEFAULT_INPUT_IO_TOGGLE_RATE "12.5 %"
+set_instance_assignment -name CURRENT_STRENGTH_NEW 8MA -to pin_*
+
+# Verilog files
+set_global_assignment -name VERILOG_FILE ../haasoscope.v
+set_global_assignment -name VERILOG_FILE ../syncreset.v
+set_global_assignment -name VERILOG_FILE ../cmdhandle/crc16ccitt.v
+set_global_assignment -name VERILOG_FILE ../cmdhandle/msgparse.v
+set_global_assignment -name VERILOG_FILE ../cmdhandle/serialselect.v
+set_global_assignment -name VERILOG_FILE ../cmdhandle/wbcmd.v
+set_global_assignment -name VERILOG_FILE ../cmdhandle/streamselect.v
+set_global_assignment -name VERILOG_FILE ../cmdhandle/msgencode.v
+set_global_assignment -name VERILOG_FILE ../cmdhandle/serialcmd.v
+set_global_assignment -name VERILOG_FILE ../busdispatch.v
+
+set_location_assignment PIN_27 -to pin_ext_osc
+set_global_assignment -name QIP_FILE ../main_pll/main_pll.qip
+
+set_location_assignment PIN_93 -to pin_usb_uart_rx
+set_location_assignment PIN_92 -to pin_usb_uart_tx
+set_global_assignment -name VERILOG_FILE ../uart/rxuartlite.v
+set_global_assignment -name VERILOG_FILE ../uart/txuartlite.v
+
+set_location_assignment PIN_132 -to pin_usbhi_wrn
+set_location_assignment PIN_127 -to pin_usbhi_txen
+set_location_assignment PIN_134 -to pin_usbhi_clkout
+set_location_assignment PIN_130 -to pin_usbhi_rdn
+set_location_assignment PIN_135 -to pin_usbhi_oen
+set_location_assignment PIN_124 -to pin_usbhi_rxfn
+set_location_assignment PIN_140 -to pin_usbhi_pwrsavn
+set_location_assignment PIN_131 -to pin_usbhi_siwun
+set_location_assignment PIN_122 -to pin_usbhi_adbus[0]
+set_location_assignment PIN_105 -to pin_usbhi_adbus[1]
+set_location_assignment PIN_119 -to pin_usbhi_adbus[2]
+set_location_assignment PIN_118 -to pin_usbhi_adbus[3]
+set_location_assignment PIN_114 -to pin_usbhi_adbus[4]
+set_location_assignment PIN_113 -to pin_usbhi_adbus[5]
+set_location_assignment PIN_111 -to pin_usbhi_adbus[6]
+set_location_assignment PIN_110 -to pin_usbhi_adbus[7]
+set_global_assignment -name VERILOG_FILE ../ft232h/ft232h.v
+set_global_assignment -name VERILOG_FILE ../ft232h/simpbuf.v
+set_global_assignment -name VERILOG_FILE ../ft232h/sync245.v
+set_global_assignment -name VERILOG_FILE ../async_fifo/async_fifo.v
+set_global_assignment -name VERILOG_FILE ../async_fifo/fifo_2mem.v
+set_global_assignment -name VERILOG_FILE ../async_fifo/rptr_empty.v
+set_global_assignment -name VERILOG_FILE ../async_fifo/wptr_full.v
+set_global_assignment -name VERILOG_FILE ../async_fifo/sync_r2w.v
+set_global_assignment -name VERILOG_FILE ../async_fifo/sync_w2r.v
+
+set_location_assignment PIN_33 -to pin_extadc1_clk
+set_location_assignment PIN_47 -to pin_extadc1_cha[0]
+set_location_assignment PIN_46 -to pin_extadc1_cha[1]
+set_location_assignment PIN_45 -to pin_extadc1_cha[2]
+set_location_assignment PIN_44 -to pin_extadc1_cha[3]
+set_location_assignment PIN_43 -to pin_extadc1_cha[4]
+set_location_assignment PIN_41 -to pin_extadc1_cha[5]
+set_location_assignment PIN_39 -to pin_extadc1_cha[6]
+set_location_assignment PIN_38 -to pin_extadc1_cha[7]
+set_location_assignment PIN_59 -to pin_extadc1_chb[0]
+set_location_assignment PIN_58 -to pin_extadc1_chb[1]
+set_location_assignment PIN_57 -to pin_extadc1_chb[2]
+set_location_assignment PIN_56 -to pin_extadc1_chb[3]
+set_location_assignment PIN_55 -to pin_extadc1_chb[4]
+set_location_assignment PIN_54 -to pin_extadc1_chb[5]
+set_location_assignment PIN_52 -to pin_extadc1_chb[6]
+set_location_assignment PIN_50 -to pin_extadc1_chb[7]
+set_location_assignment PIN_32 -to pin_extadc2_clk
+set_location_assignment PIN_74 -to pin_extadc2_cha[0]
+set_location_assignment PIN_70 -to pin_extadc2_cha[1]
+set_location_assignment PIN_69 -to pin_extadc2_cha[2]
+set_location_assignment PIN_66 -to pin_extadc2_cha[3]
+set_location_assignment PIN_65 -to pin_extadc2_cha[4]
+set_location_assignment PIN_64 -to pin_extadc2_cha[5]
+set_location_assignment PIN_62 -to pin_extadc2_cha[6]
+set_location_assignment PIN_60 -to pin_extadc2_cha[7]
+set_location_assignment PIN_85 -to pin_extadc2_chb[0]
+set_location_assignment PIN_84 -to pin_extadc2_chb[1]
+set_location_assignment PIN_81 -to pin_extadc2_chb[2]
+set_location_assignment PIN_79 -to pin_extadc2_chb[3]
+set_location_assignment PIN_78 -to pin_extadc2_chb[4]
+set_location_assignment PIN_77 -to pin_extadc2_chb[5]
+set_location_assignment PIN_76 -to pin_extadc2_chb[6]
+set_location_assignment PIN_75 -to pin_extadc2_chb[7]
+set_global_assignment -name VERILOG_FILE ../maxadc/maxadcsync.v
+set_global_assignment -name VERILOG_FILE ../adcchannel.v
+
+set_global_assignment -name VERILOG_FILE ../adctrigger.v
+set_global_assignment -name VERILOG_FILE ../trigselect.v
+
+set_global_assignment -name VERILOG_FILE ../sampleq/sampselect.v
+set_global_assignment -name VERILOG_FILE ../sampleq/sampadcacc.v
+set_global_assignment -name VERILOG_FILE ../sampleq/sampleq.v
+set_global_assignment -name VERILOG_FILE ../sampleq/sampfifo.v
+
+set_location_assignment PIN_25 -to pin_adcspi_mosi
+set_location_assignment PIN_24 -to pin_adcspi_sclk
+set_location_assignment PIN_22 -to pin_adcspi_cs
+set_global_assignment -name VERILOG_FILE ../maxadc/maxadcspi.v
+
+set_location_assignment PIN_21 -to pin_i2c_sda
+set_location_assignment PIN_141 -to pin_i2c_scl
+set_global_assignment -name VERILOG_FILE ../i2c/i2c_master_top.v
+set_global_assignment -name VERILOG_FILE ../i2c/i2c_master_byte_ctrl.v
+set_global_assignment -name VERILOG_FILE ../i2c/i2c_master_bit_ctrl.v
+
+set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

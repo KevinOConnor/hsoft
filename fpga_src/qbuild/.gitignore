@@ -1,0 +1,6 @@
+# Ignore temporary files produced by Quartus software
+db/
+incremental_db/
+output_files/
+simulation/
+haasoscope.qws
