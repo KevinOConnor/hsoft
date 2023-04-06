@@ -542,12 +542,12 @@ class AFHelper:
         prefix = "ch%d" % (self.channel,)
         mode_desc = getattr(options, prefix)
         if mode_desc is None:
-            ac_isolate, is_gain10x = (False, False)
+            ac_isolate, is_gain10 = (False, False)
         else:
-            ac_isolate, is_gain10x = self._parse_channel_mode(mode_desc)
+            ac_isolate, is_gain10 = self._parse_channel_mode(mode_desc)
             self.is_capturing = True
         self.ac_isolate = ac_isolate
-        self.is_gain10x = is_gain10x
+        self.is_gain10 = is_gain10
         probe_desc = getattr(options, prefix + "probe")
         self.probe_r = self._parse_probe_type(probe_desc)
         tdesc = getattr(options, prefix + "trigger")
