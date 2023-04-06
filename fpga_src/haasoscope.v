@@ -221,7 +221,9 @@ module haasoscope (
     wire [7:0] sq_wb_dat_i;
     wire [7:0] sq_wb_dat_o;
     wire sq_wb_ack_o;
-    sampleq sample_queue(
+    sampleq #(
+        .QUEUE_SIZE(10240)
+        ) sample_queue(
         .clk(clk),
         .sample(sq_sample), .sample_avail(sq_sample_avail), .active(sq_active),
         .trigger(sq_trigger),

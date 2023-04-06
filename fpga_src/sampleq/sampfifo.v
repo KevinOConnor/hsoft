@@ -5,7 +5,8 @@
 // This file may be distributed under the terms of the GNU GPLv3 license.
 
 module sampfifo #(
-    parameter ADDR_W = 13
+    parameter ADDR_W = 13,
+    parameter QUEUE_SIZE = 8192
     )(
     input clk,
     input [ADDR_W-1:0] raddr, output reg [31:0] rdata, input ravail,
@@ -13,7 +14,7 @@ module sampfifo #(
     );
 
     /* synthesis syn_ramstyle = no_rw_check */
-    reg [31:0] mem [(2**ADDR_W)-1:0];
+    reg [31:0] mem [QUEUE_SIZE-1:0];
 
     always @(posedge clk)
         if (ravail)

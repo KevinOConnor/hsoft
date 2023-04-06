@@ -4,7 +4,9 @@
 //
 // This file may be distributed under the terms of the GNU GPLv3 license.
 
-module sampleq(
+module sampleq #(
+    parameter QUEUE_SIZE = 8192
+    )(
     input clk,
 
     input [31:0] sample, input sample_avail, output reg active,
@@ -20,7 +22,7 @@ module sampleq(
     output wb_ack_o
     );
 
-    localparam ADDR_W = 13;
+    localparam ADDR_W = $clog2(QUEUE_SIZE);
 
     // Memory storage for samples
     wire [ADDR_W-1:0] sfifo_raddr;
@@ -30,7 +32,8 @@ module sampleq(
     wire [31:0] sfifo_wdata;
     wire sfifo_wavail;
     sampfifo #(
-        .ADDR_W(ADDR_W)
+        .ADDR_W(ADDR_W),
+        .QUEUE_SIZE(QUEUE_SIZE)
         ) sample_fifo(
         .clk(clk),
         .raddr(sfifo_raddr), .rdata(sfifo_rdata), .ravail(sfifo_ravail),
@@ -40,16 +43,23 @@ module sampleq(
     // Add incoming sample to sample fifo
     assign sfifo_wdata = sample;
     assign sfifo_wavail = sample_avail && active;
-    reg [31:0] fifo_push_counter;
-    always @(posedge clk)
-        if (sfifo_wavail)
+    reg [31:0] fifo_push_counter = 0;
+    reg [ADDR_W-1:0] fifo_push_ptr = 0;
+    always @(posedge clk) begin
+        if (sfifo_wavail) begin
             fifo_push_counter <= fifo_push_counter + 1'b1;
-    wire [ADDR_W-1:0] fifo_push_ptr = fifo_push_counter[ADDR_W-1:0];
+            if (fifo_push_ptr + 1'b1 != QUEUE_SIZE)
+                fifo_push_ptr <= fifo_push_ptr + 1'b1;
+            else
+                fifo_push_ptr <= 0;
+        end
+    end
     assign sfifo_waddr = fifo_push_ptr;
 
     // Stream data out of fifo
-    reg [ADDR_W-1:0] fifo_pull_ptr;
-    wire [ADDR_W-1:0] fifo_diff = fifo_push_ptr - fifo_pull_ptr;
+    reg [31:0] fifo_pull_counter;
+    wire [31:0] fifo_diff32 = fifo_push_counter - fifo_pull_counter;
+    wire [ADDR_W-1:0] fifo_diff = fifo_diff32[ADDR_W-1:0];
     wire [7:0] fifo_diff_cap = fifo_diff > 255 ? 8'd255 : fifo_diff[7:0];
     reg [31:0] frame_count;
     always @(posedge clk)
@@ -60,16 +70,28 @@ module sampleq(
     always @(posedge clk)
         samp_stream_avail <= have_frame && fifo_diff != 0;
     assign sfifo_ravail = have_frame && fifo_diff != 0; // XXX
+    reg [ADDR_W-1:0] fifo_pull_ptr;
     assign sfifo_raddr = fifo_pull_ptr;
     wire is_new_trigger;
     reg [ADDR_W-1:0] frame_preface;
+    wire [ADDR_W:0] next_trigger_pull_ptr = fifo_push_ptr - frame_preface;
+    wire [31:0] wrap_pull_ptr = QUEUE_SIZE + next_trigger_pull_ptr;
     reg [31:0] frame_size;
     always @(posedge clk) begin
         if (samp_stream_avail && samp_stream_pull) begin
-            fifo_pull_ptr <= fifo_pull_ptr + 1'b1;
+            fifo_pull_counter <= fifo_pull_counter + 1;
+            if (fifo_pull_ptr + 1 != QUEUE_SIZE)
+                fifo_pull_ptr <= fifo_pull_ptr + 1'b1;
+            else
+                fifo_pull_ptr <= 0;
             frame_count <= frame_count - 1;
         end else if (is_new_trigger) begin
-            fifo_pull_ptr <= fifo_push_ptr - frame_preface;
+            fifo_pull_counter <= fifo_push_counter - frame_preface;
+            if (next_trigger_pull_ptr[ADDR_W])
+                // Queue rollover - set ptr relative to end of queue
+                fifo_pull_ptr <= wrap_pull_ptr[ADDR_W-1:0];
+            else
+                fifo_pull_ptr <= next_trigger_pull_ptr[ADDR_W-1:0];
             frame_count <= frame_size;
         end
     end
@@ -83,7 +105,7 @@ module sampleq(
     // Trigger and active tracking
     wire is_command_set_status;
     always @(posedge clk) begin
-        if (have_frame && fifo_diff == 13'h1ff0)
+        if (have_frame && fifo_diff == QUEUE_SIZE - 2)
             active <= 0;
         else if (is_command_set_status)
             if (active || !have_frame)
