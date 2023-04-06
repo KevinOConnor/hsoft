@@ -1,0 +1,6 @@
+# This file describes the Python virtualenv package requirements for
+# the hcap.py host capture software (Klippy).  These package
+# requirements are typically installed via the command:
+#   pip install -r hcap-requirements.txt
+pyserial==3.5
+pyftdi==0.54.0
