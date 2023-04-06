@@ -20,12 +20,12 @@ module adctrigger (
     reg [7:0] thresh;
     wire is_greater = thresh > adc;
     reg found_inverse;
-    reg enable, cmp_abs, cmp_greater;
+    reg enable, require_inverse, cmp_greater;
     always @(posedge clk) begin
         sq_trigger = 0;
         if (enable) begin
             if (is_greater == cmp_greater) begin
-                if (!cmp_abs || found_inverse) begin
+                if (!require_inverse || found_inverse) begin
                     sq_trigger = 1;
                     found_inverse <= 0;
                 end
@@ -44,7 +44,7 @@ module adctrigger (
             enable <= wb_dat_i[0];
             if (!enable || !wb_dat_i[0]) begin
                 cmp_greater <= wb_dat_i[1];
-                cmp_abs <= wb_dat_i[2];
+                require_inverse <= wb_dat_i[2];
             end
         end
     end
@@ -59,7 +59,7 @@ module adctrigger (
     assign is_command_set_thresh = is_command && wb_adr_i[1:0] == 1;
     always @(*) begin
         case (wb_adr_i[1:0])
-        default: wb_dat_o = { cmp_abs, cmp_greater, enable };
+        default: wb_dat_o = { require_inverse, cmp_greater, enable };
         1: wb_dat_o = thresh;
         endcase
     end
