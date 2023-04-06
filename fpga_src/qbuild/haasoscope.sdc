@@ -26,6 +26,12 @@ set_input_delay -clock clock_extadc2 -max 5.5 {pin_extadc2_ch*}
 set_max_delay -to {pin_extadc1_clk pin_extadc2_clk} 4
 set_min_delay -to {pin_extadc1_clk pin_extadc2_clk} 0
 
+# Note: The above extadc pin set_input_delay ranges were found
+# experimentally.  Without tuned values the ADC may not be read
+# atomically; in particular an ADC 8-bit value near 127,128
+# (0b10000000,0b01111111) may be merged resulting in large reported
+# spikes.
+
 # max19506 spi
 create_clock -name clock_virtual_adcspi -period "2MHz"
 set_output_delay -clock clock_virtual_adcspi -min 10 {pin_adcspi_*}
