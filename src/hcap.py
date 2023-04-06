@@ -485,10 +485,10 @@ DAC_AC10x=2.35
 
 # Haasoscope analog frontend configuration helper
 class AFHelper:
-    def __init__(self, serialhdl, dac, set_ioexp_pin, channel):
+    def __init__(self, serialhdl, dac, ioexp1, channel):
         self.serialhdl = serialhdl
         self.dac = dac
-        self.set_ioexp_pin = set_ioexp_pin
+        self.ioexp1 = ioexp1
         self.channel = channel
         self.adc_center_v = 0.9
         self.adc_range_v = 1.5
@@ -620,8 +620,8 @@ class AFHelper:
         self.adc_center_v = self._calc_adc_center_volt(self.dac_v)
         # Configure channel settings
         suffix = "_ch%d" % (self.channel,)
-        self.set_ioexp_pin("dc_connect" + suffix, not self.ac_isolate)
-        self.set_ioexp_pin("gain" + suffix, self.is_gain10)
+        self.ioexp1.set_output("dc_connect" + suffix, not self.ac_isolate)
+        self.ioexp1.set_output("gain" + suffix, self.is_gain10)
         self.dac.set_dac(self.channel, self.dac_v)
         # Setup trigger
         trigaddr = 0x3000 + self.channel * 0x100
@@ -677,9 +677,9 @@ class HProcessor:
         # gpio expanders
         self.ioexp1 = mcp23017(i2c.send_i2c, I2C_EXP1_ADDR, PINS_IOEXP1)
         self.ioexp2 = mcp23017(i2c.send_i2c, I2C_EXP2_ADDR, PINS_IOEXP2)
-        self.pin_to_ioexp = {n: self.ioexp1 for n in PINS_IOEXP1}
-        self.pin_to_ioexp.update({n: self.ioexp2 for n in PINS_IOEXP2})
-        for pin_name, ioexp in self.pin_to_ioexp.items():
+        pin_to_ioexp = {n: self.ioexp1 for n in PINS_IOEXP1}
+        pin_to_ioexp.update({n: self.ioexp2 for n in PINS_IOEXP2})
+        for pin_name, ioexp in pin_to_ioexp.items():
             if pin_name.startswith("switch_"):
                 ioexp.set_input(pin_name, 1)
             elif pin_name.startswith("extra_io"):
@@ -687,8 +687,7 @@ class HProcessor:
             else:
                 ioexp.set_output(pin_name, 0)
         # analog frontend helpers
-        self.af_helpers = [AFHelper(self.serialhdl, self.dac,
-                                    self.set_ioexp_pin, ch)
+        self.af_helpers = [AFHelper(self.serialhdl, self.dac, self.ioexp1, ch)
                            for ch in range(4)]
     def setup_cmdline_options(self, opts):
         for afh in self.af_helpers:
@@ -700,33 +699,27 @@ class HProcessor:
         self.sqhelper.note_cmdline_options(options)
     def note_filename(self, csvfilename):
         self.sqhelper.note_filename(csvfilename)
-    def set_ioexp_pin(self, pin_name, value):
-        ioexp = self.pin_to_ioexp[pin_name]
-        ioexp.set_output(pin_name, value)
-    def get_ioexp_pin(self, pin_name):
-        ioexp = self.pin_to_ioexp[pin_name]
-        return ioexp.get_input(pin_name)
     def run(self, ser):
         self.serialhdl.setup(ser)
         self.sqhelper.setup()
         self.adcspi.setup()
         self.i2c.setup(FPGA_FREQ)
         # configure mcp23017 gpio expander 2
-        self.set_ioexp_pin("led0", 1)
+        self.ioexp2.set_output("led0", 1)
         self.ioexp2.update_pins()
         self.ioexp2.read_pins()
         self.ioexp2.dump_pins()
         # Setup channels
-        self.set_ioexp_pin("enable_ch2", 1)
-        self.set_ioexp_pin("enable_ch3", 1)
+        self.ioexp1.set_output("enable_ch2", 1)
+        self.ioexp1.set_output("enable_ch3", 1)
         if not any([ah.check_is_capturing() for ah in self.af_helpers]):
             self.af_helpers[0].set_capturing()
         force_trigger = True
         for ch in range(4):
             ah = self.af_helpers[ch]
             suffix = "_ch%d" % (ch,)
-            sw_imp10Mohm = self.get_ioexp_pin("switch_imp10Mohm" + suffix)
-            sw_gain100 = self.get_ioexp_pin("switch_gain100" + suffix)
+            sw_imp10Mohm = self.ioexp2.get_input("switch_imp10Mohm" + suffix)
+            sw_gain100 = self.ioexp2.get_input("switch_gain100" + suffix)
             ah.note_switches(sw_imp10Mohm, sw_gain100)
             ah.setup_channel()
             if ah.have_trigger():
@@ -739,15 +732,15 @@ class HProcessor:
         self.serialhdl.clear()
         # Disable ADC
         for ch in range(4):
-            self.set_ioexp_pin("dc_connect_ch%d" % (ch,), 0)
-        self.set_ioexp_pin("shutdown_adc1", 1)
-        self.set_ioexp_pin("shutdown_adc2", 1)
+            self.ioexp1.set_output("dc_connect_ch%d" % (ch,), 0)
+        self.ioexp1.set_output("shutdown_adc1", 1)
+        self.ioexp1.set_output("shutdown_adc2", 1)
         self.ioexp1.update_pins()
         for ch in range(4):
             self.dac.set_dac(ch, 0.0)
         # Turn off LEDs
         for led in range(4):
-            self.set_ioexp_pin("led%d" % (led,), 0)
+            self.ioexp2.set_output("led%d" % (led,), 0)
         self.ioexp2.update_pins()
         sys.stdout.write("\nShutdown adc complete.\n")
 
