@@ -428,7 +428,7 @@ class SQHelper:
             bpos = base_pos + i * 4 * num_channels
             for j in range(4):
                 for ah, ch, idx in cmap:
-                    d = frame_data[bpos + idx*4]
+                    d = frame_data[bpos + idx*4 + j]
                     line_data[ch] = ah.calc_probe_volt(d)
                 csvf.write("%.9f,%.6f,%.6f,%.6f,%.6f\n"
                            % (line_num*stime, line_data[0], line_data[1],
