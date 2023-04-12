@@ -293,7 +293,7 @@ class mcp4728:
         return self._decode_volt(self._encode_volt(volt))
     def set_dac(self, channel, volt):
         value = self._encode_volt(volt)
-        sys.stdout.write("dac %d %.4f 0x%03x\n" % (channel, volt, value))
+        #sys.stdout.write("dac %d %.4f 0x%03x\n" % (channel, volt, value))
         self.send_i2c(self.i2c_addr,
                       [0x40 | (channel << 1), ((value >> 8) & 0x1f) | 0x80,
                        value & 0xff])
@@ -380,6 +380,10 @@ class SQHelper:
         self.csvfilename = csvfilename
     def _note_frame_data(self, msgdata):
         self.frame_datas.append(msgdata)
+    def get_status(self):
+        return ("Hz=%.0f preface=%.6fs duration=%.6f\n"
+                % (self.fpga_freq / self.channel_div,
+                   self.preface_time, self.frame_time))
     def _parse_frame_data(self, frame_slot):
         # Map active channels
         cmap = []
@@ -401,10 +405,20 @@ class SQHelper:
         skip_start = (num_channels - (frame_slot % num_channels)) % num_channels
         sample_count -= skip_start
         sample_count -= sample_count % num_channels
+        # CSV file header
+        hdrs = ["; HSoft data capture '%s'" % (time.asctime(),)]
+        hdrs.append(";")
+        hdrs.append("; " + self.get_status().strip())
+        hdrs.append(";")
+        for ah in self.af_helpers:
+            sts = ah.get_status()
+            hdrs.extend([("; " + s).strip() for s in sts.split('\n')])
+        hdrs.append("time,%s" % (",".join(hdr)))
+        hdrs.append("")
+        header = "\n".join(hdrs)
         # Create file
         csvf = io.open(self.csvfilename, "w")
-        csvf.write("; HSoft data capture '%s'\n" % (time.asctime(),))
-        csvf.write("time,%s\n" % (",".join(hdr)))
+        csvf.write(header)
         # Write data to file
         stime = float(self.channel_div) / self.fpga_freq
         line_data = [0.] * 4
@@ -424,6 +438,7 @@ class SQHelper:
         csvf.close()
     def capture_frame(self, af_helpers, force_trigger):
         self.af_helpers = af_helpers
+        sys.stdout.write(self.get_status())
         # Enable fifo
         num_channels = 0
         for ch in range(4):
@@ -610,6 +625,24 @@ class AFHelper:
         c1 = (probe_r + in_r*c0) / feedback_r
         probe_v = dac_v*(c1 + c0) - adc_v*c1
         return probe_v
+    def get_status(self):
+        trig = "None"
+        if self.trigger_code:
+            trigtype = {0x04: "falling", 0x06: "rising",
+                        0x00: "below", 0x02: "above"}
+            ttype = trigtype[self.trigger_code & ~0x01]
+            tvolt = self.calc_probe_volt(self._calc_adc(self.trigger_volt))
+            trig = "%s %.6fV" % (ttype, tvolt)
+        min_v = self.calc_probe_volt(255)
+        max_v = self.calc_probe_volt(0)
+        return ("channel%d: capturing=%d ac_isolate=%d"
+                " 50ohm=%d gain10x=%d gain100x=%d\n"
+                "  DAC=%.4fV probe=%.0fohm range=%.6fV:%.6fV (inc=%.6fV)\n"
+                "  trigger: %s\n"
+                % (self.channel, self.is_capturing, self.ac_isolate,
+                   not self.sw_imp10Mohm, self.is_gain10, self.sw_gain100,
+                   self.dac_v, self.probe_r, min_v, max_v, (max_v-min_v)/255.,
+                   trig))
     def setup_channel(self):
         if not self.sw_imp10Mohm or self.sw_gain100:
             sys.stdout.write("WARN: 100x mode and 50ohm mode not supported\n")
@@ -630,14 +663,8 @@ class AFHelper:
             tadc = self._calc_adc(self.trigger_volt)
             self.serialhdl.write_reg(trigaddr + 1, tadc)
             self.serialhdl.write_reg(trigaddr, self.trigger_code)
-            sys.stdout.write("ch%d: trigger=%.4f(%d)\n"
-                             % (self.channel, self.trigger_volt, tadc))
         # Report config
-        min_v = self.calc_probe_volt(255)
-        max_v = self.calc_probe_volt(0)
-        sys.stdout.write("ch%d: gain10x=%d DAC %.4f (%.4f:%.4f)\n"
-                         % (self.channel, self.is_gain10,
-                            self.dac_v, min_v, max_v))
+        sys.stdout.write(self.get_status())
 
 
 ######################################################################
