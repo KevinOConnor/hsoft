@@ -398,13 +398,16 @@ class SQHelper:
                 hdr.append("unused%d" % (ch,))
         # Combine messages into one bytearray()
         frame_data = bytearray().join(self.frame_datas)
-        sys.stdout.write("Total bytes %d (%d sample entries)\n"
-                         % (len(frame_data), len(frame_data)//4))
         # Skip unaligned reports at start and end of data
         sample_count = len(frame_data) // 4
         skip_start = (num_channels - (frame_slot % num_channels)) % num_channels
         sample_count -= skip_start
         sample_count -= sample_count % num_channels
+        stime = float(self.channel_div) / self.fpga_freq
+        total_lines = sample_count // num_channels * 4
+        sys.stdout.write("Total bytes %d (%d sample queue) %d lines (%.9fs)\n"
+                         % (len(frame_data), len(frame_data)//4,
+                            total_lines, total_lines * stime))
         # CSV file header
         hdrs = ["; HSoft data capture '%s'" % (time.asctime(),)]
         hdrs.append(";")
@@ -420,7 +423,6 @@ class SQHelper:
         csvf = io.open(self.csvfilename, "w")
         csvf.write(header)
         # Write data to file
-        stime = float(self.channel_div) / self.fpga_freq
         line_data = [0.] * 4
         line_num = 0
         base_pos = skip_start * 4
