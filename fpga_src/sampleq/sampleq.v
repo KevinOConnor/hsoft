@@ -67,8 +67,13 @@ module sampleq #(
                               ? frame_count[7:0] : fifo_diff_cap);
     assign samp_stream_data = sfifo_rdata;
     reg have_frame;
-    always @(posedge clk)
-        samp_stream_avail <= have_frame && fifo_diff != 0;
+    wire can_pull = have_frame && fifo_diff != 0;
+    reg samp_stream_raw_avail;
+    always @(posedge clk) begin
+        samp_stream_raw_avail <= can_pull;
+        samp_stream_avail <= can_pull && (!active || fifo_diff_cap >= 120
+                                          || fifo_diff_cap > frame_count);
+    end
     assign sfifo_ravail = have_frame; // Avoids read/write to same addr
     reg [ADDR_W-1:0] fifo_pull_ptr;
     assign sfifo_raddr = fifo_pull_ptr;
@@ -78,7 +83,7 @@ module sampleq #(
     wire [31:0] wrap_pull_ptr = QUEUE_SIZE + next_trigger_pull_ptr;
     reg [31:0] frame_size;
     always @(posedge clk) begin
-        if (samp_stream_avail && samp_stream_pull) begin
+        if (samp_stream_raw_avail && samp_stream_pull) begin
             fifo_pull_counter <= fifo_pull_counter + 1;
             if (fifo_pull_ptr + 1 != QUEUE_SIZE)
                 fifo_pull_ptr <= fifo_pull_ptr + 1'b1;
