@@ -491,12 +491,22 @@ class SQHelper:
 # Analog frontend helper
 ######################################################################
 
-# XXX - unknown how to predict DAC voltage.  The following is from
-# experiments.  Other scopes may require other values.
-DAC_DC1x=1.0575
-DAC_DC10x=1.5535
-DAC_AC1x=1.235
-DAC_AC10x=2.35
+# XXX - the following is from experiments on one Haasoscope.  Other
+# scopes will likely benefit from other values.  Ideally this would be
+# stored in FPGA flash on the Haasoscope.  This info should be
+# per-channel.
+ADC_GAIN1_FACTOR=-1.5 * 1100000. / (200000. * 255.)
+ADC_GAIN10_FACTOR=-1.5 * 1100000. / (2000000. * 255.)
+BASE_PROBES = {
+    'ac1x': {'dac': 1.235, 'adc_factor': ADC_GAIN1_FACTOR},
+    'ac10x': {'dac': 2.35, 'adc_factor': ADC_GAIN10_FACTOR},
+    'dc1x': {'dac': 1.0575, 'adc_factor': ADC_GAIN1_FACTOR},
+    'dc10x': {'dac': 1.5535, 'adc_factor': ADC_GAIN10_FACTOR},
+}
+PROBES = {
+    ('dc1x', '10x'): {'dac': 1.2125, 'adc_factor': ADC_GAIN1_FACTOR * 10.},
+    ('dc10x', '10x'): {'dac': 2.329, 'adc_factor': ADC_GAIN10_FACTOR * 10.},
+}
 
 # Haasoscope analog frontend configuration helper
 class AFHelper:
@@ -505,11 +515,9 @@ class AFHelper:
         self.dac = dac
         self.ioexp1 = ioexp1
         self.channel = channel
-        self.adc_center_v = 0.9
-        self.adc_range_v = 1.5
         self.sw_imp10Mohm = self.sw_gain100 = False
         self.ac_isolate = self.is_gain10 = False
-        self.dac_v = DAC_DC1x
+        self.dac_v = self.base_adc = self.base_v = self.adc_factor = 0.
         self.trigger_code = 0
         self.trigger_volt = 0.
         self.is_capturing = False
@@ -518,8 +526,8 @@ class AFHelper:
         help_prefix = "Channel %d " % (self.channel,)
         opts.add_option(prefix, type="string", default=None,
                         help=help_prefix + "mode")
-        opts.add_option(prefix + "probe", type="string", default="1x",
-                        help=help_prefix + "probe resistance (or type)")
+        opts.add_option(prefix + "probe", type="string", default=None,
+                        help=help_prefix + "probe type")
         opts.add_option(prefix + "trigger", type="string", default=None,
                         help=help_prefix + "set trigger")
     def _parse_channel_mode(self, val):
@@ -530,19 +538,27 @@ class AFHelper:
             sys.stdout.write("Available modes: DC1x, DC10x, AC1x, AC10x\n")
             sys.exit(-1)
         return modes[val]
-    def _parse_probe_type(self, probe_desc):
-        probe_desc = probe_desc.strip().lower()
-        if probe_desc in ["1x", "10x"]:
-            if probe_desc == "10x":
-                return 9000000.
-            return 0.
-        mult = 1.
-        if probe_desc.endswith("mohm"):
-            probe_desc = probe_desc[:-4].strip()
-            mult = 1000000.
-        if probe_desc.endswith("ohm"):
-            probe_desc = probe_desc[:-3].strip()
-        return float(probe_desc) * mult
+    def _parse_probe_type(self, probe_desc, mode_desc):
+        base_info = BASE_PROBES.get(mode_desc)
+        if probe_desc is not None:
+            probe_desc = probe_desc.lower().strip()
+            info = PROBES.get((mode_desc, probe_desc))
+            if info is None and mode_desc.startswith('ac'):
+                info = PROBES.get(('dc' + mode_desc[2:], probe_desc))
+        else:
+            info = base_info
+        if info is None:
+            modes = [k[1] for k in PROBES.keys() if k[0] == mode_desc]
+            sys.stdout.write("Unknown probe '%s' - available: %s\n"
+                             % (probe_desc, ", ".join(modes)))
+            sys.exit(-1)
+        self.adc_factor = info['adc_factor']
+        if self.ac_isolate and base_info is not None:
+            # Only use adc_factor in ac_isolate mode
+            info = base_info
+        self.dac_v = info['dac']
+        self.base_adc = info.get('adc', 255. / 2.)
+        self.base_v = info.get('voltage', 0.)
     def _parse_trigger(self, val):
         val = val.strip()
         tcode = 0x04
@@ -556,15 +572,13 @@ class AFHelper:
     def note_cmdline_options(self, options):
         prefix = "ch%d" % (self.channel,)
         mode_desc = getattr(options, prefix)
-        if mode_desc is None:
-            ac_isolate, is_gain10 = (False, False)
-        else:
-            ac_isolate, is_gain10 = self._parse_channel_mode(mode_desc)
+        if mode_desc is not None:
             self.is_capturing = True
-        self.ac_isolate = ac_isolate
-        self.is_gain10 = is_gain10
+        else:
+            mode_desc = "dc1x"
+        self.ac_isolate, self.is_gain10 = self._parse_channel_mode(mode_desc)
         probe_desc = getattr(options, prefix + "probe")
-        self.probe_r = self._parse_probe_type(probe_desc)
+        self._parse_probe_type(probe_desc, mode_desc)
         tdesc = getattr(options, prefix + "trigger")
         if tdesc is not None:
             self.trigger_code, self.trigger_volt = self._parse_trigger(tdesc)
@@ -577,53 +591,11 @@ class AFHelper:
         return self.is_capturing
     def set_capturing(self):
         self.is_capturing = True
-    def _get_resistances(self, is_gain10):
-        if self.sw_imp10Mohm:
-            gnd_r = 10000000.
-        else:
-            gnd_r = 1. / ((1. / 10000000.) + (1. / 50.))
-        if self.sw_gain100:
-            in_r = 11000.
-        else:
-            in_r = 1100000.
-        if is_gain10:
-            feedback_r = 2000000.
-        else:
-            feedback_r = 200000.
-        probe_r = self.probe_r
-        if self.ac_isolate:
-            # XXX - this is not correct
-            probe_r = 0.
-        return (probe_r, gnd_r, in_r, feedback_r)
-    def _calc_adc_center_volt(self, dac_v):
-        # Actual center of ADC range is 0.9V, but that doesn't work in practice
-        is_gain10 = self.is_gain10
-        probe_r, gnd_r, in_r, feedback_r = self._get_resistances(is_gain10)
-        probe_r = 0.
-        probe_v = 0.
-        c0 = (probe_r + gnd_r) / gnd_r
-        c1 = (probe_r + in_r*c0) / feedback_r
-        adc_v = (dac_v*(c1 + c0) - probe_v) / c1
-        return adc_v
     def _calc_adc(self, probe_v):
-        is_gain10 = self.is_gain10
-        dac_v = self.dac_v
-        probe_r, gnd_r, in_r, feedback_r = self._get_resistances(is_gain10)
-        adc_base_v = self.adc_center_v - self.adc_range_v / 2.
-        c0 = (probe_r + gnd_r) / gnd_r
-        c1 = (probe_r + in_r*c0) / feedback_r
-        adc_v = (dac_v*(c1 + c0) - probe_v) / c1
-        adc_result = int((adc_v - adc_base_v) / self.adc_range_v * 255)
-        return adc_result
+        adc_result = (probe_v - self.base_v) / self.adc_factor + self.base_adc
+        return max(0, min(255, int(adc_result + 0.5)))
     def calc_probe_volt(self, adc_result):
-        is_gain10 = self.is_gain10
-        dac_v = self.dac_v
-        probe_r, gnd_r, in_r, feedback_r = self._get_resistances(is_gain10)
-        adc_base_v = self.adc_center_v - self.adc_range_v / 2.
-        adc_v = adc_base_v + adc_result / 255. * self.adc_range_v
-        c0 = (probe_r + gnd_r) / gnd_r
-        c1 = (probe_r + in_r*c0) / feedback_r
-        probe_v = dac_v*(c1 + c0) - adc_v*c1
+        probe_v = self.base_v + (adc_result - self.base_adc) * self.adc_factor
         return probe_v
     def get_status(self):
         trig = "None"
@@ -637,20 +609,15 @@ class AFHelper:
         max_v = self.calc_probe_volt(0)
         return ("channel%d: capturing=%d ac_isolate=%d"
                 " 50ohm=%d gain10x=%d gain100x=%d\n"
-                "  DAC=%.4fV probe=%.0fohm range=%.6fV:%.6fV (inc=%.6fV)\n"
-                "  trigger: %s\n"
+                "  DAC=%.4fV base_adc=%.6f base_v=%.6fV adc_factor=%.6fV\n"
+                "  range=%.6fV:%.6fV trigger: %s\n"
                 % (self.channel, self.is_capturing, self.ac_isolate,
                    not self.sw_imp10Mohm, self.is_gain10, self.sw_gain100,
-                   self.dac_v, self.probe_r, min_v, max_v, (max_v-min_v)/255.,
-                   trig))
+                   self.dac_v, self.base_adc, self.base_v, self.adc_factor,
+                   min_v, max_v, trig))
     def setup_channel(self):
         if not self.sw_imp10Mohm or self.sw_gain100:
             sys.stdout.write("WARN: 100x mode and 50ohm mode not supported\n")
-        # Select the dac voltage
-        dacs = {(False, False): DAC_DC1x, (False, True): DAC_DC10x,
-                (True, False): DAC_AC1x, (True, True): DAC_AC10x}
-        self.dac_v = dacs[(self.ac_isolate, self.is_gain10)]
-        self.adc_center_v = self._calc_adc_center_volt(self.dac_v)
         # Configure channel settings
         suffix = "_ch%d" % (self.channel,)
         self.ioexp1.set_output("dc_connect" + suffix, not self.ac_isolate)
