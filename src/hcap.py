@@ -327,6 +327,13 @@ class Max19506spi:
 # Sample Queue handling
 ######################################################################
 
+# Mapping of bit resolution to fpga control code
+DEPOSIT_TYPES = {
+    # num_bits: (measurements_per_sample, shift, code)
+    8: (4, 8, 0), 10: (3, 10, 1), 13: (2, 13, 2),
+    5: (6, 5, 3), 6: (5, 13, 6),
+}
+
 class SQHelper:
     def __init__(self, serialhdl, fpga_freq):
         self.serialhdl = serialhdl
@@ -342,6 +349,11 @@ class SQHelper:
         self.frame_time = 0.100
         self.channel_div = 1
         self.query_rate = fpga_freq
+        # Handling of measurements within each sample queue entry
+        self.meas_bits = 8
+        self.meas_mask = 0xff
+        self.meas_base = 0
+        self.do_meas_sum = True
         # Frame handling
         self.frame_datas = []
         self.af_helpers = None
@@ -349,6 +361,8 @@ class SQHelper:
     def setup_cmdline_options(self, opts):
         opts.add_option("-q", "--queryrate", type="string", default="125MHz",
                         help="Sample query rate")
+        opts.add_option("-b", "--bits", type=int, default=8,
+                        help="Number of bits per measurement")
         opts.add_option("--duration", type="string", default="100ms",
                         help="Duration of data to report")
         opts.add_option("--preface", type="string", default="2us",
@@ -373,6 +387,12 @@ class SQHelper:
         return float(val) * mult
     def note_cmdline_options(self, options):
         qrate = self._parse_hz(options.queryrate)
+        meas_bits = options.bits
+        if meas_bits not in DEPOSIT_TYPES:
+            sys.stdout.write("Available bit modes: %s\n"
+                             % (sorted(DEPOSIT_TYPES.keys()),))
+            sys.exit(-1)
+        self.meas_bits = meas_bits
         self.channel_div = max(1, min(0x100, int(self.fpga_freq // qrate)))
         self.frame_time = self._parse_time(options.duration)
         self.preface_time = self._parse_time(options.preface)
@@ -382,8 +402,11 @@ class SQHelper:
         self.frame_datas.append(msgdata)
     def get_status(self):
         return ("Hz=%.0f preface=%.6fs duration=%.6f\n"
+                "  meas_sum=%d meas_bits=%d meas_mask=%x meas_base=%d\n"
                 % (self.fpga_freq / self.channel_div,
-                   self.preface_time, self.frame_time))
+                   self.preface_time, self.frame_time,
+                   self.do_meas_sum, self.meas_bits,
+                   self.meas_mask, self.meas_base))
     def _parse_frame_data(self, frame_slot):
         # Map active channels
         cmap = []
@@ -391,11 +414,17 @@ class SQHelper:
         num_channels = 0
         for ch, ah in enumerate(self.af_helpers):
             if ah.check_is_capturing():
-                cmap.append((ah, ch, num_channels))
+                cmap.append((ah, ch, num_channels * 4))
                 num_channels += 1
                 hdr.append("ch%d" % (ch,))
             else:
                 hdr.append("unused%d" % (ch,))
+        # Handle multiple measurements in each sample queue entry
+        meas_per_sample, meas_shift, meas_code = DEPOSIT_TYPES[self.meas_bits]
+        meas_mask = self.meas_mask
+        meas_mult = 1.
+        if self.do_meas_sum:
+            meas_mult = 1. / self.channel_div
         # Combine messages into one bytearray()
         frame_data = bytearray().join(self.frame_datas)
         # Skip unaligned reports at start and end of data
@@ -404,15 +433,15 @@ class SQHelper:
         sample_count -= skip_start
         sample_count -= sample_count % num_channels
         stime = float(self.channel_div) / self.fpga_freq
-        total_lines = sample_count // num_channels * 4
+        total_lines = sample_count // num_channels * meas_per_sample
         sys.stdout.write("Total bytes %d (%d sample queue) %d lines (%.9fs)\n"
                          % (len(frame_data), len(frame_data)//4,
                             total_lines, total_lines * stime))
         # CSV file header
         hdrs = ["; HSoft data capture '%s'" % (time.asctime(),)]
         hdrs.append(";")
-        hdrs.append("; " + self.get_status().strip())
-        hdrs.append(";")
+        sts = self.get_status()
+        hdrs.extend([("; " + s).strip() for s in sts.split('\n')])
         for ah in self.af_helpers:
             sts = ah.get_status()
             hdrs.extend([("; " + s).strip() for s in sts.split('\n')])
@@ -423,25 +452,48 @@ class SQHelper:
         csvf = io.open(self.csvfilename, "w")
         csvf.write(header)
         # Write data to file
-        line_data = [0.] * 4
+        line_data = [[0.] * 4 for i in range(meas_per_sample)]
         line_num = 0
         base_pos = skip_start * 4
         for i in range(sample_count // num_channels):
             bpos = base_pos + i * 4 * num_channels
-            for j in range(4):
-                for ah, ch, idx in cmap:
-                    d = frame_data[bpos + idx*4 + j]
-                    line_data[ch] = ah.calc_probe_volt(d)
+            for ah, ch, offset in cmap:
+                spos = bpos + offset
+                d = (frame_data[spos] | (frame_data[spos+1] << 8)
+                     | (frame_data[spos+2] << 16) | (frame_data[spos+3] << 24))
+                d = d | (d << 32)
+                for j in range(meas_per_sample):
+                    m = (d >> ((j * meas_shift) & 0x1f)) & meas_mask
+                    v = ah.calc_probe_volt(m * meas_mult)
+                    line_data[meas_per_sample - 1 - j][ch] = v
+            for ld in line_data:
                 csvf.write("%.9f,%.6f,%.6f,%.6f,%.6f\n"
-                           % (line_num*stime, line_data[0], line_data[1],
-                              line_data[2], line_data[3]))
+                           % (line_num*stime, ld[0], ld[1],ld[2], ld[3]))
                 line_num += 1
         csvf.write("; End of capture (%d data lines)\n" % (line_num,))
         csvf.close()
+    def _calc_meas_mask(self):
+        meas_bits = self.meas_bits
+        if self.channel_div == 1:
+            meas_bits = self.meas_bits = min(8, meas_bits)
+        meas_mask = (1 << meas_bits) - 1
+        meas_base = 0
+        max_val = 0xff
+        if self.do_meas_sum:
+            max_val *= self.channel_div
+        max_val_num_bits = max_val.bit_length()
+        if max_val_num_bits > meas_bits:
+            need_shift = max_val_num_bits - meas_bits
+            meas_mask <<= need_shift
+            meas_base = 1 << (need_shift - 1)
+        self.meas_mask = meas_mask
+        self.meas_base = meas_base
     def capture_frame(self, af_helpers, force_trigger):
         self.af_helpers = af_helpers
+        self._calc_meas_mask()
         sys.stdout.write(self.get_status())
         # Enable fifo
+        meas_per_sample, meas_shift, meas_code = DEPOSIT_TYPES[self.meas_bits]
         num_channels = 0
         for ch in range(4):
             is_capturing = self.af_helpers[ch].check_is_capturing()
@@ -449,7 +501,10 @@ class SQHelper:
             sampaddr = 0x3020 + ch * 0x100
             self.write_reg(sampaddr, 0x00)
             self.write_reg(sampaddr + 1, self.channel_div - 1)
-            self.write_reg(sampaddr, is_capturing)
+            self.write_reg16(sampaddr + 2, self.meas_mask)
+            self.write_reg16(sampaddr + 4, self.meas_base)
+            self.write_reg(sampaddr, (is_capturing | (self.do_meas_sum << 1)
+                                      | (meas_code << 4)))
         qrate = self.fpga_freq * num_channels / ( 4. * self.channel_div)
         frame_size = max(16, min(0xffffffff, int(self.frame_time * qrate)))
         self.write_reg32(0x5104, frame_size)

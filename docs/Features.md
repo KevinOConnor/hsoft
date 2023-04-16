@@ -12,7 +12,9 @@ code.
 
 - Data captures utilize the internal FPGA memory.  Data captures can
   be larger than the FPGA memory if the host capture software reads
-  data sufficiently fast.
+  data sufficiently fast.  One may reduce bandwidth by selecting data
+  rates slower than 125Mhz (62.50Mhz, 41.67Mhz, 31.25Mhz, 25.00Mhz,
+  etc.).  The measurement bit size can also be chosen.
 
 - Resulting data captures can be imported into Sigrok and/or
   Pulseview.
@@ -42,11 +44,6 @@ code.
 
 - There is currently no support for capturing digital measurements
   using the Haasoscope digital input pins.
-
-- When capturing data at rates slower than 125Mhz, it would be useful
-  to support "oversampling" (also known as "highres" mode).  That is,
-  averaging multiple samples together to improve the signal to noise
-  ratio.
 
 # Known limitations
 
