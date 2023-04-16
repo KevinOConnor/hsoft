@@ -7,7 +7,7 @@
 module msgparse (
     input clk, input [7:0] rx_data, input rx_avail,
 
-    output stb_o, output reg [5:0] seq_o, output reg we_o,
+    output reg stb_o, output reg [5:0] seq_o, output reg we_o,
     output reg [15:0] adr_o, output reg [7:0] dat_o
     );
 
@@ -91,7 +91,8 @@ module msgparse (
             endcase
         end
     end
-    assign stb_o = rx_avail && recv_state == GET_TERM && rx_data == SCAN_CHAR;
+    always @(posedge clk)
+        stb_o <= rx_avail && recv_state == GET_TERM && rx_data == SCAN_CHAR;
 
     crc16ccitt crc16ccitt(
         .clk(clk),
