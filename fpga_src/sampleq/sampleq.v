@@ -69,7 +69,7 @@ module sampleq #(
     reg have_frame;
     always @(posedge clk)
         samp_stream_avail <= have_frame && fifo_diff != 0;
-    assign sfifo_ravail = have_frame && fifo_diff != 0; // XXX
+    assign sfifo_ravail = have_frame; // Avoids read/write to same addr
     reg [ADDR_W-1:0] fifo_pull_ptr;
     assign sfifo_raddr = fifo_pull_ptr;
     wire is_new_trigger;
