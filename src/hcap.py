@@ -468,7 +468,7 @@ class SQHelper:
                     line_data[meas_per_sample - 1 - j][ch] = v
             for ld in line_data:
                 csvf.write("%.9f,%.6f,%.6f,%.6f,%.6f\n"
-                           % (line_num*stime, ld[0], ld[1],ld[2], ld[3]))
+                           % (line_num*stime, ld[0], ld[1], ld[2], ld[3]))
                 line_num += 1
         csvf.write("; End of capture (%d data lines)\n" % (line_num,))
         csvf.close()
