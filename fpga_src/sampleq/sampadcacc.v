@@ -32,9 +32,11 @@ module sampadcacc (
     // Sum masking
     reg [15:0] sum_mask;
     wire [15:0] adc_sum = adc_sum_with_carry[15:0];
-    wire [15:0] raw_sum_mask = adc_sum & sum_mask;
-    wire [15:0] masked_sum = adc_sum_with_carry[16] ? 1'b0 : (
-                adc_sum > sum_mask ? sum_mask : raw_sum_mask);
+    wire [15:0] raw_sum_with_mask = adc_sum & sum_mask;
+    wire did_underflow = adc_sum_with_carry[16] && initial_sum[15];
+    wire did_overflow = adc_sum_with_carry > sum_mask;
+    wire [15:0] masked_sum = (did_underflow ? 1'b0
+                              : (did_overflow ? sum_mask : raw_sum_with_mask));
 
     // Sample shifting
     localparam SC_SHIFT8=0, SC_SHIFT10=1, SC_SHIFT13=2, SC_SHIFT5=3;
