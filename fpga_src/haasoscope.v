@@ -25,8 +25,11 @@ module haasoscope (
 
     // Main clock
     localparam CLOCK_FREQUENCY = 125000000;
-    wire clk;
-    main_pll pll(.inclk0(pin_ext_osc), .c0(clk));
+    wire clk, phased_clk;
+    main_pll pll(
+        .inclk0(pin_ext_osc),
+        .c1(clk), .c2(phased_clk)
+        );
 
     // Reset signal
     wire rst;
@@ -151,7 +154,7 @@ module haasoscope (
         .wb_adr_i(ch1_wb_adr_i), .wb_dat_i(ch1_wb_dat_i),
         .wb_dat_o(ch1_wb_dat_o), .wb_ack_o(ch1_wb_ack_o)
         );
-    assign pin_extadc2_clk = clk;
+    assign pin_extadc2_clk = phased_clk;
     wire ch2_trigger;
     wire [31:0] extadc_ch2_sample;
     wire extadc_ch2_sample_avail;

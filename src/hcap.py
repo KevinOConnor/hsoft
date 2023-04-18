@@ -339,11 +339,13 @@ class Max19506spi:
         self.wait_spi_ready()
     def setup(self):
         # configure MAX19506 ADC
-        self.send_spi(0x08, 0x00) # Default voltage modes (0.9V)
-        self.send_spi(0x06, 0x10) # "offset binary" output
-        self.send_spi(0x04, 0x1b) # 150 Ohm ChA
-        self.send_spi(0x05, 0x1b) # 150 Ohm ChB
         self.send_spi(0x01, 0x00) # Default non-multiplexed output
+        self.send_spi(0x02, 0x03) # Disable DOR and DCLK output
+        self.send_spi(0x03, 0b10111111) # Use "-3T/16" data output timing
+        self.send_spi(0x04, 0x00) # Default 50 Ohm on ChA data pins
+        self.send_spi(0x05, 0x00) # Default 50 Ohm on ChB data pins
+        self.send_spi(0x06, 0x10) # "offset binary" output
+        self.send_spi(0x08, 0x00) # Default voltage modes (0.9V)
 
 
 ######################################################################

@@ -17,20 +17,18 @@ set_output_delay -clock clock_usbhi -min 7.5 {pin_usbhi_oen pin_usbhi_rdn pin_us
 set_output_delay -clock clock_usbhi -max 0 {pin_usbhi_oen pin_usbhi_rdn pin_usbhi_wrn pin_usbhi_pwrsavn pin_usbhi_siwun pin_usbhi_adbus*}
 
 # max19506 adcs
-create_clock -name clock_extadc1 -period "125MHz" [get_ports pin_extadc1_clk]
-set_input_delay -clock clock_extadc1 -min 0 {pin_extadc1_ch*}
-set_input_delay -clock clock_extadc1 -max 1 {pin_extadc1_ch*}
-create_clock -name clock_extadc2 -period "125MHz" [get_ports pin_extadc2_clk]
-set_input_delay -clock clock_extadc2 -min 0 {pin_extadc2_ch*}
-set_input_delay -clock clock_extadc2 -max 5.5 {pin_extadc2_ch*}
-set_max_delay -to {pin_extadc1_clk pin_extadc2_clk} 4
-set_min_delay -to {pin_extadc1_clk pin_extadc2_clk} 0
 
-# Note: The above extadc pin set_input_delay ranges were found
-# experimentally.  Without tuned values the ADC may not be read
-# atomically; in particular an ADC 8-bit value near 127,128
-# (0b10000000,0b01111111) may be merged resulting in large reported
-# spikes.
+create_generated_clock -name clock_extadc1 -source {pll*clk[1]} [get_ports pin_extadc1_clk]
+create_generated_clock -name clock_extadc2 -source {pll*clk[2]} [get_ports pin_extadc2_clk]
+set_input_delay -clock clock_extadc1 0 {pin_extadc1_ch*}
+set_input_delay -clock clock_extadc2 0 {pin_extadc2_ch*}
+# Force Quartus to use IO registers for the extadc pins.  The output
+# timing can be tuned at runtime in the max19506 via SPI
+# configuration.
+set_min_delay -from {pin_extadc1_ch*} 0.0
+set_max_delay -from {pin_extadc1_ch*} 5.5
+set_min_delay -from {pin_extadc2_ch*} 0.0
+set_max_delay -from {pin_extadc2_ch*} 5.5
 
 # max19506 spi
 create_clock -name clock_virtual_adcspi -period "2MHz"

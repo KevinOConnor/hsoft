@@ -50,6 +50,7 @@ set_global_assignment -name VERILOG_FILE ../busdispatch.v
 
 set_location_assignment PIN_27 -to pin_ext_osc
 set_global_assignment -name QIP_FILE ../main_pll/main_pll.qip
+set_instance_assignment -name PRESERVE_PLL_COUNTER_ORDER ON -to main_pll*
 
 set_location_assignment PIN_93 -to pin_usb_uart_rx
 set_location_assignment PIN_92 -to pin_usb_uart_tx
@@ -116,6 +117,8 @@ set_location_assignment PIN_78 -to pin_extadc2_chb[4]
 set_location_assignment PIN_77 -to pin_extadc2_chb[5]
 set_location_assignment PIN_76 -to pin_extadc2_chb[6]
 set_location_assignment PIN_75 -to pin_extadc2_chb[7]
+set_instance_assignment -name FAST_INPUT_REGISTER ON -to pin_extadc1_ch*
+set_instance_assignment -name FAST_INPUT_REGISTER ON -to pin_extadc2_ch*
 set_global_assignment -name VERILOG_FILE ../maxadc/maxadcsync.v
 set_global_assignment -name VERILOG_FILE ../adcchannel.v
 
