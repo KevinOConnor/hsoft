@@ -21,10 +21,10 @@ ADC_CHANNEL_REGS = {
     "sum_mask": (0x22, 2),
     "initial_sum": (0x24, 2),
 }
-FPGA_MODULES["ch0"] = (0x30, ADC_CHANNEL_REGS)
-FPGA_MODULES["ch1"] = (0x31, ADC_CHANNEL_REGS)
-FPGA_MODULES["ch2"] = (0x32, ADC_CHANNEL_REGS)
-FPGA_MODULES["ch3"] = (0x33, ADC_CHANNEL_REGS)
+FPGA_MODULES["ch0"] = (0x80, ADC_CHANNEL_REGS)
+FPGA_MODULES["ch1"] = (0x81, ADC_CHANNEL_REGS)
+FPGA_MODULES["ch2"] = (0x82, ADC_CHANNEL_REGS)
+FPGA_MODULES["ch3"] = (0x83, ADC_CHANNEL_REGS)
 
 # Sample queue configuration
 SAMPLE_QUEUE_REGS = {
@@ -34,7 +34,7 @@ SAMPLE_QUEUE_REGS = {
     "reg_fifo_position": (0x08, 4),
     "frame_count": (0x0c, 4),
 }
-FPGA_MODULES["sq"] = (0x51, SAMPLE_QUEUE_REGS)
+FPGA_MODULES["sq"] = (0x87, SAMPLE_QUEUE_REGS)
 
 # ADC SPI configuration
 ADC_SPI_REGS = {
@@ -42,7 +42,7 @@ ADC_SPI_REGS = {
     "data0": (0x02, 1),
     "data1": (0x03, 1),
 }
-FPGA_MODULES["adcspi"] = (0x53, ADC_SPI_REGS)
+FPGA_MODULES["adcspi"] = (0x01, ADC_SPI_REGS)
 
 # I2C configuration (from opencores i2c module)
 I2C_REGS = {
@@ -53,4 +53,4 @@ I2C_REGS = {
     "cr": (0x04, 1),
     "sr": (0x04, 1), # read-only alias of "cr"
 }
-FPGA_MODULES["i2c"] = (0x49, I2C_REGS)
+FPGA_MODULES["i2c"] = (0x02, I2C_REGS)

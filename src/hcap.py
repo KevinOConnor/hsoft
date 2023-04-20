@@ -730,6 +730,7 @@ class AFHelper:
 ######################################################################
 
 FPGA_FREQ=125000000
+FPGA_SLOW_FREQ=62500000
 BAUD=1500000
 
 I2C_DAC_ADDR=0x60
@@ -788,7 +789,7 @@ class HProcessor:
         self.serialhdl.setup(ser)
         self.sqhelper.setup()
         self.adcspi.setup()
-        self.i2c.setup(FPGA_FREQ)
+        self.i2c.setup(FPGA_SLOW_FREQ)
         # configure mcp23017 gpio expander 2
         self.ioexp2.set_output("led0", 1)
         self.ioexp2.update_pins()

@@ -24,11 +24,11 @@ module haasoscope (
     );
 
     // Main clock
-    localparam CLOCK_FREQUENCY = 125000000;
-    wire clk, phased_clk;
+    localparam CLOCK_FREQUENCY = 125000000, SLOW_CLOCK_FREQUENCY = 62500000;
+    wire slow_clk, clk, phased_clk;
     main_pll pll(
         .inclk0(pin_ext_osc),
-        .c1(clk), .c2(phased_clk)
+        .c0(slow_clk), .c1(clk), .c2(phased_clk)
         );
 
     // Reset signal
@@ -242,46 +242,12 @@ module haasoscope (
         .wb_dat_o(sq_wb_dat_o), .wb_ack_o(sq_wb_ack_o)
         );
 
-    // MAX19506 SPI message sending
-    wire adcspi_wb_stb_i, adcspi_wb_cyc_i, adcspi_wb_we_i;
-    wire [7:0] adcspi_wb_adr_i;
-    wire [7:0] adcspi_wb_dat_i;
-    wire [7:0] adcspi_wb_dat_o;
-    wire adcspi_wb_ack_o;
-    maxadcspi #(
-        .CLOCK_FREQUENCY(CLOCK_FREQUENCY)
-        ) maxadc_command(
-        .clk(clk),
-        .mosi(pin_adcspi_mosi), .sclk(pin_adcspi_sclk), .cs(pin_adcspi_cs),
-
-        .wb_stb_i(adcspi_wb_stb_i), .wb_cyc_i(adcspi_wb_cyc_i),
-        .wb_we_i(adcspi_wb_we_i),
-        .wb_adr_i(adcspi_wb_adr_i), .wb_dat_i(adcspi_wb_dat_i),
-        .wb_dat_o(adcspi_wb_dat_o), .wb_ack_o(adcspi_wb_ack_o)
-        );
-
-    // I2C (for dac and gpio expanders)
-    wire i2c_scl_o, i2c_scl_oen, i2c_scl_i, i2c_sda_o, i2c_sda_oen, i2c_sda_i;
-    assign pin_i2c_scl = i2c_scl_oen ? 1'bz : i2c_scl_o;
-    assign i2c_scl_i = pin_i2c_scl;
-    assign pin_i2c_sda = i2c_sda_oen ? 1'bz : i2c_sda_o;
-    assign i2c_sda_i = pin_i2c_sda;
-    wire i2c_wb_stb_i, i2c_wb_cyc_i, i2c_wb_we_i;
-    wire [7:0] i2c_wb_adr_i;
-    wire [7:0] i2c_wb_dat_i;
-    wire [7:0] i2c_wb_dat_o;
-    wire i2c_wb_ack_o;
-    i2c_master_top i2c(
-        .scl_pad_i(i2c_scl_i),
-        .scl_pad_o(i2c_scl_o), .scl_padoen_o(i2c_scl_oen),
-        .sda_pad_i(i2c_sda_i),
-        .sda_pad_o(i2c_sda_o), .sda_padoen_o(i2c_sda_oen),
-
-        .wb_clk_i(clk), .wb_rst_i(rst),
-        .wb_stb_i(i2c_wb_stb_i), .wb_cyc_i(i2c_wb_cyc_i), .wb_we_i(i2c_wb_we_i),
-        .wb_adr_i(i2c_wb_adr_i), .wb_dat_i(i2c_wb_dat_i),
-        .wb_dat_o(i2c_wb_dat_o), .wb_ack_o(i2c_wb_ack_o)
-        );
+    // Low-speed wishbone bus signals
+    wire altclk_wb_stb_i, altclk_wb_cyc_i, altclk_wb_we_i;
+    wire [15:0] altclk_wb_adr_i;
+    wire [7:0] altclk_wb_dat_i;
+    wire [7:0] altclk_wb_dat_o;
+    wire altclk_wb_ack_o;
 
     // Bus routing
     busdispatch bus_dispatcher(
@@ -315,6 +281,62 @@ module haasoscope (
         .sq_wb_we_o(sq_wb_we_i),
         .sq_wb_adr_o(sq_wb_adr_i), .sq_wb_dat_o(sq_wb_dat_i),
         .sq_wb_dat_i(sq_wb_dat_o), .sq_wb_ack_i(sq_wb_ack_o),
+
+        .altclk_wb_stb_o(altclk_wb_stb_i), .altclk_wb_cyc_o(altclk_wb_cyc_i),
+        .altclk_wb_we_o(altclk_wb_we_i),
+        .altclk_wb_adr_o(altclk_wb_adr_i), .altclk_wb_dat_o(altclk_wb_dat_i),
+        .altclk_wb_dat_i(altclk_wb_dat_o), .altclk_wb_ack_i(altclk_wb_ack_o)
+        );
+
+    // MAX19506 SPI message sending
+    wire adcspi_wb_stb_i, adcspi_wb_cyc_i, adcspi_wb_we_i;
+    wire [15:0] adcspi_wb_adr_i;
+    wire [7:0] adcspi_wb_dat_i;
+    wire [7:0] adcspi_wb_dat_o;
+    wire adcspi_wb_ack_o;
+    maxadcspi #(
+        .CLOCK_FREQUENCY(SLOW_CLOCK_FREQUENCY)
+        ) maxadc_command(
+        .clk(slow_clk),
+        .mosi(pin_adcspi_mosi), .sclk(pin_adcspi_sclk), .cs(pin_adcspi_cs),
+
+        .wb_stb_i(adcspi_wb_stb_i), .wb_cyc_i(adcspi_wb_cyc_i),
+        .wb_we_i(adcspi_wb_we_i),
+        .wb_adr_i(adcspi_wb_adr_i), .wb_dat_i(adcspi_wb_dat_i),
+        .wb_dat_o(adcspi_wb_dat_o), .wb_ack_o(adcspi_wb_ack_o)
+        );
+
+    // I2C (for dac and gpio expanders)
+    wire i2c_scl_o, i2c_scl_oen, i2c_scl_i, i2c_sda_o, i2c_sda_oen, i2c_sda_i;
+    assign pin_i2c_scl = i2c_scl_oen ? 1'bz : i2c_scl_o;
+    assign i2c_scl_i = pin_i2c_scl;
+    assign pin_i2c_sda = i2c_sda_oen ? 1'bz : i2c_sda_o;
+    assign i2c_sda_i = pin_i2c_sda;
+    wire i2c_wb_stb_i, i2c_wb_cyc_i, i2c_wb_we_i;
+    wire [15:0] i2c_wb_adr_i;
+    wire [7:0] i2c_wb_dat_i;
+    wire [7:0] i2c_wb_dat_o;
+    wire i2c_wb_ack_o;
+    i2c_master_top i2c(
+        .scl_pad_i(i2c_scl_i),
+        .scl_pad_o(i2c_scl_o), .scl_padoen_o(i2c_scl_oen),
+        .sda_pad_i(i2c_sda_i),
+        .sda_pad_o(i2c_sda_o), .sda_padoen_o(i2c_sda_oen),
+
+        .wb_clk_i(slow_clk),
+        .wb_stb_i(i2c_wb_stb_i), .wb_cyc_i(i2c_wb_cyc_i), .wb_we_i(i2c_wb_we_i),
+        .wb_adr_i(i2c_wb_adr_i), .wb_dat_i(i2c_wb_dat_i),
+        .wb_dat_o(i2c_wb_dat_o), .wb_ack_o(i2c_wb_ack_o)
+        );
+
+    // Low speed bus routing
+    buslsdispatch bus_low_speed_dispatcher(
+        .clk(clk), .slow_clk(slow_clk),
+
+        .wb_stb_i(altclk_wb_stb_i), .wb_cyc_i(altclk_wb_cyc_i),
+        .wb_we_i(altclk_wb_we_i),
+        .wb_adr_i(altclk_wb_adr_i), .wb_dat_i(altclk_wb_dat_i),
+        .wb_dat_o(altclk_wb_dat_o), .wb_ack_o(altclk_wb_ack_o),
 
         .adcspi_wb_stb_o(adcspi_wb_stb_i), .adcspi_wb_cyc_o(adcspi_wb_cyc_i),
         .adcspi_wb_we_o(adcspi_wb_we_i),
