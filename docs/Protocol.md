@@ -64,5 +64,6 @@ then responds with a RESPONSE message.  For read requests, the
 RESPONSE message will contain the data read from the requested
 address.
 
-The registers at each address and the fields within those registers
-are not currently documented.
+The registers at each address can be found in the
+[fpgaregs.py](../src/fpgaregs.py) module.  The fields within those
+registers are not currently documented.

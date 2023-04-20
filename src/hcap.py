@@ -5,6 +5,7 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import sys, optparse, time, io
+import fpgaregs
 
 class error(Exception):
     pass
@@ -27,7 +28,8 @@ def crc16_ccitt(buf, start, end):
     return [crc >> 8, crc & 0xff]
 
 class SerialHandler:
-    def __init__(self):
+    def __init__(self, modregs):
+        self.modregs = modregs
         self.ser = None
         # Message parsing
         self.tx_seq = self.rx_seq = 0
@@ -155,33 +157,43 @@ class SerialHandler:
             self.ser.write(msg)
             curtime = time.time()
             retry_time = curtime + 0.250
-    def write_reg(self, addr, val):
+    def write_reg(self, modname, regname, val):
         #sys.stdout.write("Send: write 0x%04x of 0x%04x\n" % (addr, val))
-        self._tx_message(0x80, addr, val)
-    def read_reg(self, addr):
+        modaddr, regs = self.modregs[modname]
+        regaddr, regsize = regs[regname]
+        addr = (modaddr << 8) | regaddr
+        if regsize == 4:
+            self._tx_message(0x80, addr, val & 0xff)
+            self._tx_message(0x80, addr + 1, (val >> 8) & 0xff)
+            self._tx_message(0x80, addr + 2, (val >> 16) & 0xff)
+            self._tx_message(0x80, addr + 3, (val >> 24) & 0xff)
+        elif regsize == 2:
+            self._tx_message(0x80, addr, val & 0xff)
+            self._tx_message(0x80, addr + 1, (val >> 8) & 0xff)
+        else:
+            self._tx_message(0x80, addr, val & 0xff)
+    def read_reg(self, modname, regname):
         #sys.stdout.write("Send: read 0x%04x\n" % (addr,))
-        return self._tx_message(0x00, addr, 0x00)
-    def write_reg16(self, addr, val):
-        self.write_reg(addr, val & 0xff)
-        self.write_reg(addr + 1, (val >> 8) & 0xff)
-    def write_reg32(self, addr, val):
-        self.write_reg(addr, val & 0xff)
-        self.write_reg(addr + 1, (val >> 8) & 0xff)
-        self.write_reg(addr + 2, (val >> 16) & 0xff)
-        self.write_reg(addr + 3, (val >> 24) & 0xff)
-    def read_reg16(self, addr):
-        return self.read_reg(addr) | (self.read_reg(addr + 1) << 8)
-    def read_reg32(self, addr):
-        return (self.read_reg(addr) | (self.read_reg(addr + 1) << 8)
-                | (self.read_reg(addr + 2) << 16)
-                | (self.read_reg(addr + 3) << 24))
+        modaddr, regs = self.modregs[modname]
+        regaddr, regsize = regs[regname]
+        addr = (modaddr << 8) | regaddr
+        if regsize == 4:
+            return (self._tx_message(0x00, addr, 0x00)
+                    | (self._tx_message(0x00, addr + 1, 0x00) << 8)
+                    | (self._tx_message(0x00, addr + 2, 0x00) << 16)
+                    | (self._tx_message(0x00, addr + 3, 0x00) << 24))
+        elif regsize == 2:
+            return (self._tx_message(0x00, addr, 0x00)
+                    | (self._tx_message(0x00, addr + 1, 0x00) << 8))
+        else:
+            return self._tx_message(0x00, addr, 0x00)
     def setup(self, ser):
         self.ser = ser
         self.register_stream(0x60, self._handle_response)
         # Verify connection and obtain initial sequence numbers
         self._flush_connection()
         self.no_seq_warnings = True
-        self.read_reg(0x5300)
+        self.read_reg("adcspi", "state") # Dummy read
         self.no_seq_warnings = False
 
 
@@ -193,13 +205,12 @@ class I2CHelper:
     def __init__(self, serialhdl):
         self.read_reg = serialhdl.read_reg
         self.write_reg = serialhdl.write_reg
-        self.write_reg16 = serialhdl.write_reg16
     def send_i2c_byte(self, cmdflags, data=None):
         if not (cmdflags & (1<<5)):
-            self.write_reg(0x4903, data)
-        self.write_reg(0x4904, cmdflags)
+            self.write_reg("i2c", "txr", data)
+        self.write_reg("i2c", "cr", cmdflags)
         while 1:
-            res = self.read_reg(0x4904)
+            res = self.read_reg("i2c", "sr")
             if not (res & (1<<1)):
                 # Complete
                 break
@@ -220,15 +231,15 @@ class I2CHelper:
                 if i == read_count - 1:
                     cmdflags |= (1<<6) | (1<<3)
                 self.send_i2c_byte(cmdflags)
-                res.append(self.read_reg(0x4903))
+                res.append(self.read_reg("i2c", "rxr"))
         #sys.stdout.write("i2c 0x%02x %s is %s\n" % (addr, write, res))
         return res
     def setup(self, fpga_freq):
         i2c_freq = 100000
-        self.write_reg(0x4902, 0x00)
+        self.write_reg("i2c", "ctr", 0x00)
         isp = fpga_freq // (5 * i2c_freq) - 1
-        self.write_reg16(0x4900, isp)
-        self.write_reg(0x4902, 0x80)
+        self.write_reg("i2c", "prer", isp)
+        self.write_reg("i2c", "ctr", 0x80)
 
 
 ######################################################################
@@ -305,14 +316,14 @@ class Max19506spi:
         self.write_reg = serialhdl.write_reg
     def wait_spi_ready(self):
         while 1:
-            res = self.read_reg(0x5300)
+            res = self.read_reg("adcspi", "state")
             if not res:
                 break
     def send_spi(self, reg, val):
         self.wait_spi_ready()
-        self.write_reg(0x5302, reg & 0x7f)
-        self.write_reg(0x5303, val & 0xff)
-        self.write_reg(0x5300, 0x01)
+        self.write_reg("adcspi", "data0", reg & 0x7f)
+        self.write_reg("adcspi", "data1", val & 0xff)
+        self.write_reg("adcspi", "state", 0x01)
         self.wait_spi_ready()
     def setup(self):
         # configure MAX19506 ADC
@@ -339,11 +350,7 @@ class SQHelper:
         self.serialhdl = serialhdl
         self.fpga_freq = fpga_freq
         self.read_reg = self.serialhdl.read_reg
-        self.read_reg16 = self.serialhdl.read_reg16
-        self.read_reg32 = self.serialhdl.read_reg32
         self.write_reg = self.serialhdl.write_reg
-        self.write_reg16 = self.serialhdl.write_reg16
-        self.write_reg32 = self.serialhdl.write_reg32
         # Frame config
         self.frame_preface = 0.000002
         self.frame_time = 0.100
@@ -498,34 +505,35 @@ class SQHelper:
         for ch in range(4):
             is_capturing = self.af_helpers[ch].check_is_capturing()
             num_channels += is_capturing
-            sampaddr = 0x3020 + ch * 0x100
-            self.write_reg(sampaddr, 0x00)
-            self.write_reg(sampaddr + 1, self.channel_div - 1)
-            self.write_reg16(sampaddr + 2, self.meas_mask)
-            self.write_reg16(sampaddr + 4, self.meas_base)
-            self.write_reg(sampaddr, (is_capturing | (self.do_meas_sum << 1)
-                                      | (meas_code << 4)))
+            chname = "ch%d" % (ch,)
+            self.write_reg(chname, "status", 0x00)
+            self.write_reg(chname, "acc_cnt", self.channel_div - 1)
+            self.write_reg(chname, "sum_mask", self.meas_mask)
+            self.write_reg(chname, "initial_sum", self.meas_base)
+            self.write_reg(chname, "status",
+                           (is_capturing | (self.do_meas_sum << 1)
+                            | (meas_code << 4)))
         qrate = self.fpga_freq * num_channels / ( 4. * self.channel_div)
         frame_size = max(16, min(0xffffffff, int(self.frame_time * qrate)))
-        self.write_reg32(0x5104, frame_size)
+        self.write_reg("sq", "frame_count", frame_size)
         frame_prefix = max(8, min(0x1f00, int(self.preface_time * qrate)))
-        self.write_reg16(0x5102, frame_prefix)
+        self.write_reg("sq", "frame_preface", frame_prefix)
         # Start sampling
         sys.stdout.write(" START SAMPLING\n")
-        self.write_reg(0x5100, 0x81)
-        start_pos = self.read_reg32(0x5108)
+        self.write_reg("sq", "status", 0x81)
+        start_pos = self.read_reg("sq", "reg_fifo_position")
         # Query fifo data
         self.serialhdl.register_stream(0x61, self._note_frame_data)
         self.serialhdl.read_data(time.time() + 0.020)
         sys.stdout.write(" START CAPTURE\n")
         start_time = time.time()
         if force_trigger:
-            self.write_reg(0x5100, 0x07)
+            self.write_reg("sq", "status", 0x07)
         else:
-            self.write_reg(0x5100, 0x03)
+            self.write_reg("sq", "status", 0x03)
         for i in range(3000):
             self.serialhdl.read_data(start_time + (i + 1) * 0.010)
-            sts = self.read_reg(0x5100)
+            sts = self.read_reg("sq", "status")
             if sts & 0x0a == 0x00:
                 if sts & 0x01:
                     sys.stdout.write(" CAPTURE COMPLETE\n")
@@ -534,14 +542,14 @@ class SQHelper:
                     sys.stdout.write(" CAPTURE EARLY END (t=%.3f)\n"
                                      % (end_time - start_time))
                 break
-        frame_pos = self.read_reg32(0x5108)
+        frame_pos = self.read_reg("sq", "reg_fifo_position")
         sys.stdout.write(" FINALIZE CAPTURE\n")
-        self.write_reg(0x5100, 0x00)
+        self.write_reg("sq", "status", 0x00)
         frame_diff = frame_pos - start_pos - frame_prefix - 1
         frame_slot = frame_diff & 0xffffffff
         self._parse_frame_data(frame_slot)
     def setup(self):
-        self.write_reg(0x5100, 0x00)
+        self.write_reg("sq", "status", 0x00)
 
 
 ######################################################################
@@ -681,12 +689,12 @@ class AFHelper:
         self.ioexp1.set_output("gain" + suffix, self.is_gain10)
         self.dac.set_dac(self.channel, self.dac_v)
         # Setup trigger
-        trigaddr = 0x3000 + self.channel * 0x100
-        self.serialhdl.write_reg(trigaddr, 0x00)
+        modname = "ch%d" % (self.channel,)
+        self.serialhdl.write_reg(modname, "trigger", 0x00)
         if self.trigger_code:
             tadc = self._calc_adc(self.trigger_volt)
-            self.serialhdl.write_reg(trigaddr + 1, tadc)
-            self.serialhdl.write_reg(trigaddr, self.trigger_code)
+            self.serialhdl.write_reg(modname, "thresh", tadc)
+            self.serialhdl.write_reg(modname, "trigger", self.trigger_code)
         # Report config
         sys.stdout.write(self.get_status())
 
@@ -720,7 +728,7 @@ PINS_IOEXP2 = {
 
 class HProcessor:
     def __init__(self):
-        self.serialhdl = SerialHandler()
+        self.serialhdl = SerialHandler(fpgaregs.FPGA_MODULES)
         self.sqhelper = SQHelper(self.serialhdl, FPGA_FREQ)
         self.adcspi = Max19506spi(self.serialhdl)
         self.i2c = i2c = I2CHelper(self.serialhdl)
