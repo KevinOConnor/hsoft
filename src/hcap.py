@@ -374,6 +374,8 @@ class SQHelper:
                         help="Duration of data to report")
         opts.add_option("--preface", type="string", default="2us",
                         help="Time prior to trigger to report")
+        opts.add_option("--average", type="int", default=1,
+                        help="Average measurements at lower query rates")
     def _parse_hz(self, val):
         val = val.strip().lower()
         mult = 1000000.
@@ -400,6 +402,7 @@ class SQHelper:
                              % (sorted(DEPOSIT_TYPES.keys()),))
             sys.exit(-1)
         self.meas_bits = meas_bits
+        self.do_meas_sum = not not options.average
         self.channel_div = max(1, min(0x100, int(self.fpga_freq // qrate)))
         self.frame_time = self._parse_time(options.duration)
         self.preface_time = self._parse_time(options.preface)

@@ -116,7 +116,8 @@ One can also reduce the query rate with the `-q` option.  For example,
 typically increase the capture time by five).  If a query rate less
 than 125Mhz is selected then the average of the merged measurements is
 reported - this can improve the signal to noise ratio of the reported
-data.
+data.  If averaging of measurements is not desired then it can be
+disabled with `--average 0`.
 
 It is also possible to change the number of bits per reported
 measurement using the `-b` option.  One can choose 13, 10, 8, 6, or 5
