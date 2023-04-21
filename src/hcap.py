@@ -587,14 +587,26 @@ class AFHelper:
         self.trigger_volt = 0.
         self.is_capturing = False
     def setup_cmdline_options(self, opts):
+        if self.channel == 0:
+            opts.add_option("-c", "--channels", type="string",
+                            default="ch0,ch1,ch2,ch3",
+                            help="Channels to capture")
         prefix = "--ch%d" % (self.channel,)
         help_prefix = "Channel %d " % (self.channel,)
-        opts.add_option(prefix, type="string", default=None,
+        opts.add_option(prefix, type="string", default="dc1x",
                         help=help_prefix + "mode")
         opts.add_option(prefix + "probe", type="string", default=None,
                         help=help_prefix + "probe type")
         opts.add_option(prefix + "trigger", type="string", default=None,
                         help=help_prefix + "set trigger")
+    def _parse_channels(self, val):
+        channels = []
+        for p in val.lower().split(','):
+            p = p.strip()
+            if p.startswith("ch"):
+                p = p[2:]
+            channels.append(int(p))
+        return channels
     def _parse_channel_mode(self, val):
         val = val.strip().lower()
         modes = {"dc1x": (False, False), "dc10x": (False, True),
@@ -635,12 +647,11 @@ class AFHelper:
         tvolt = float(val)
         return tcode | 0x01, tvolt
     def note_cmdline_options(self, options):
+        channels_desc = getattr(options, "channels")
+        channels = self._parse_channels(channels_desc)
+        self.is_capturing = (self.channel in channels)
         prefix = "ch%d" % (self.channel,)
         mode_desc = getattr(options, prefix)
-        if mode_desc is not None:
-            self.is_capturing = True
-        else:
-            mode_desc = "dc1x"
         self.ac_isolate, self.is_gain10 = self._parse_channel_mode(mode_desc)
         probe_desc = getattr(options, prefix + "probe")
         self._parse_probe_type(probe_desc, mode_desc)
@@ -654,8 +665,6 @@ class AFHelper:
         return self.trigger_code != 0
     def check_is_capturing(self):
         return self.is_capturing
-    def set_capturing(self):
-        self.is_capturing = True
     def _calc_adc(self, probe_v):
         adc_result = (probe_v - self.base_v) / self.adc_factor + self.base_adc
         return max(0, min(255, int(adc_result + 0.5)))
@@ -771,8 +780,6 @@ class HProcessor:
         # Setup channels
         self.ioexp1.set_output("enable_ch2", 1)
         self.ioexp1.set_output("enable_ch3", 1)
-        if not any([ah.check_is_capturing() for ah in self.af_helpers]):
-            self.af_helpers[0].set_capturing()
         force_trigger = True
         for ch in range(4):
             ah = self.af_helpers[ch]

@@ -67,7 +67,7 @@ The host capture software is invoked by running the `src/hcap.py`
 tool.  For example:
 
 ```
-~/hcap-env/bin/python src/hcap.py /dev/serial/by-id/usb-1a86_USB2.0-Serial-if00-port0 mydata.csv --ch0trigger '<1.0' --ch0 dc1x
+~/hcap-env/bin/python src/hcap.py /dev/serial/by-id/usb-1a86_USB2.0-Serial-if00-port0 mydata.csv --ch0trigger '<1.0' --ch0 ac1x
 ```
 
 To connect to the Haasoscope, one must select the serial device.  The
@@ -76,14 +76,14 @@ on-board full-speed USB device will show up as
 systems.
 
 Run `~/hcap-env/bin/python src/hcap.py --help` for a list of available
-command-line options.  To enable capturing on a channel select it with
+command-line options.  The capturing mode of a channel can be set with
 a `--ch0 dc1x` style declaration (available modes are `dc1x`, `dc10x`,
-`ac1x` or `ac10x`).  The resulting capture data will be stored in a
-csv file (`mydata.csv` in the example above).  A trigger can be
-specified: `<1.0` indicates trigger on a falling voltage below 1.0
-volts (use `>v` to trigger on rising voltage level, `~v` to trigger on
-any voltage above the value, or `_v` to trigger on any voltage below
-the value).
+`ac1x` or `ac10x`; the default is `dc1x`).  The resulting capture data
+will be stored in a csv file (`mydata.csv` in the example above).  A
+trigger can be specified: `<1.0` indicates trigger on a falling
+voltage below 1.0 volts (use `>v` to trigger on rising voltage level,
+`~v` to trigger on any voltage above the value, or `_v` to trigger on
+any voltage below the value).
 
 # Running sigrok/pulseview
 
@@ -99,6 +99,37 @@ Alternatively, one can run pulseview normally, select to open a
 "Comma-separated values" file, open the desired csv file, and enter
 `t,4a` when asked for the "Column format specs".
 
+# Extending the duration of captures
+
+The device can typically capture 80us of data from all four channels
+at a 125Mhz capture rate.  One can reduce the amount of data captured
+to extend this time range.
+
+One can select the channels to capture using the `-c` command-line
+option.  For example, `-c ch0,ch1` would only capture the first two
+channels (and thus roughly double the capture time).  It is possible
+to set a trigger on a channel even if the data from that channel is
+not reported.
+
+One can also reduce the query rate with the `-q` option.  For example,
+`-q 25Mhz` would reduce the returned data by one fifth (and thus
+typically increase the capture time by five).  If a query rate less
+than 125Mhz is selected then the average of the merged measurements is
+reported - this can improve the signal to noise ratio of the reported
+data.
+
+It is also possible to change the number of bits per reported
+measurement using the `-b` option.  One can choose 13, 10, 8, 6, or 5
+bits per measurement (the default is 8 bits).  A lower bit rate
+results in more "coarse" data measurements, but can increase the
+capture duration time.  The use of 13 and 10 bits is available when a
+query rate less than 125Mhz is used - these bit sizes enable more
+precise reporting of the averaged measurements.
+
+Using the USB hi-speed adapter can also extend the total capture time.
+If the USB interface is able to extract measurements faster than they
+are recorded then one can effectively stream data from the device.
+
 # Using the USB hi-speed adapter
 
 One can also perform a capture using the optional USB hi-speed
@@ -109,5 +140,5 @@ adapter.  First find the device identification by running:
 
 Then one can run the hcap software using that id.  For example:
 ```
-~/hcap-env/bin/python src/hcap.py -u FT5U0000 mydata.csv --ch0trigger '<1.0' --ch0 dc1x
+~/hcap-env/bin/python src/hcap.py -u FT5U0000 mydata.csv --ch0trigger '<1.0' --ch0 ac1x
 ```
