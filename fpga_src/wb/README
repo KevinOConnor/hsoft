@@ -1,3 +1,6 @@
 This directory contains code from:
   https://github.com/alexforencich/verilog-wishbone
 version d1fa24a0e5634160536c199eab42f1af720d14ff.
+
+The code has been modified so that it works with "clasic wishbone"
+buses.  See the wb.patch file for the changes.

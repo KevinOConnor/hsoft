@@ -174,7 +174,7 @@ always @(posedge wbs_clk) begin
         wbs_cyc_o_reg <= 0;
         wbs_done_reg <= 0;
     end else begin
-        if (wbs_ack_i | wbs_err_i | wbs_rty_i) begin
+        if (wbs_cyc_o && wbs_stb_o && (wbs_ack_i | wbs_err_i | wbs_rty_i)) begin
             // end of cycle - store slave
             wbs_dat_i_reg <= wbs_dat_i;
             wbs_ack_i_reg <= wbs_ack_i;
