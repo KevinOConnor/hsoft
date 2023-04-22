@@ -54,6 +54,7 @@ set_global_assignment -name VERILOG_FILE ../codeversion.v
 set_location_assignment PIN_27 -to pin_ext_osc
 set_global_assignment -name QIP_FILE ../main_pll/main_pll.qip
 set_instance_assignment -name PRESERVE_PLL_COUNTER_ORDER ON -to main_pll*
+set_global_assignment -name VERILOG_FILE ../pllphase.v
 
 set_location_assignment PIN_93 -to pin_usb_uart_rx
 set_location_assignment PIN_92 -to pin_usb_uart_tx

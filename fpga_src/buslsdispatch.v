@@ -25,7 +25,12 @@ module buslsdispatch (
     // I2C module
     output reg i2c_wb_stb_o, output i2c_wb_cyc_o, output i2c_wb_we_o,
     output [15:0] i2c_wb_adr_o, output [7:0] i2c_wb_dat_o,
-    input [7:0] i2c_wb_dat_i, input i2c_wb_ack_i
+    input [7:0] i2c_wb_dat_i, input i2c_wb_ack_i,
+
+    // PLL phase module
+    output reg pp_wb_stb_o, output pp_wb_cyc_o, output pp_wb_we_o,
+    output [15:0] pp_wb_adr_o, output [7:0] pp_wb_dat_o,
+    input [7:0] pp_wb_dat_i, input pp_wb_ack_i
     );
 
     // Transfer wishbone messages across clock domains
@@ -63,10 +68,16 @@ module buslsdispatch (
     assign i2c_wb_cyc_o=ls_cyc_i, i2c_wb_we_o=ls_we_i;
     assign i2c_wb_adr_o=ls_adr_i, i2c_wb_dat_o=ls_dat_i;
 
+    // PLL phase module
+    localparam PP_ADDR = 8'h03;
+    assign pp_wb_cyc_o=ls_cyc_i, pp_wb_we_o=ls_we_i;
+    assign pp_wb_adr_o=ls_adr_i, pp_wb_dat_o=ls_dat_i;
+
     always @(*) begin
         vers_wb_stb_o = 0;
         adcspi_wb_stb_o = 0;
         i2c_wb_stb_o = 0;
+        pp_wb_stb_o = 0;
 
         case (ls_adr_i[15:8])
         VERS_ADDR: begin
@@ -83,6 +94,11 @@ module buslsdispatch (
             i2c_wb_stb_o = ls_stb_i;
             ls_dat_o = i2c_wb_dat_i;
             ls_ack_o = i2c_wb_ack_i;
+        end
+        PP_ADDR: begin
+            pp_wb_stb_o = ls_stb_i;
+            ls_dat_o = pp_wb_dat_i;
+            ls_ack_o = pp_wb_ack_i;
         end
         default: begin
             ls_dat_o = 0;

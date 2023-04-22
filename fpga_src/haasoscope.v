@@ -25,10 +25,16 @@ module haasoscope (
 
     // Main clock
     localparam CLOCK_FREQUENCY = 125000000, SLOW_CLOCK_FREQUENCY = 62500000;
+    wire [2:0] pll_phasecounterselect;
+    wire pll_phasestep, pll_phaseupdown, pll_scanclk, pll_phasedone;
     wire slow_clk, clk, phased_clk;
     main_pll pll(
         .inclk0(pin_ext_osc),
-        .c0(slow_clk), .c1(clk), .c2(phased_clk)
+        .c0(slow_clk), .c1(clk), .c2(phased_clk),
+
+        .phasecounterselect(pll_phasecounterselect), .phasestep(pll_phasestep),
+        .phaseupdown(pll_phaseupdown), .scanclk(pll_scanclk),
+        .phasedone(pll_phasedone)
         );
 
     // Reset signal
@@ -343,6 +349,26 @@ module haasoscope (
         .wb_dat_o(i2c_wb_dat_o), .wb_ack_o(i2c_wb_ack_o)
         );
 
+    // PLL phase adjustment
+    wire pp_wb_stb_i, pp_wb_cyc_i, pp_wb_we_i;
+    wire [15:0] pp_wb_adr_i;
+    wire [7:0] pp_wb_dat_i;
+    wire [7:0] pp_wb_dat_o;
+    wire pp_wb_ack_o;
+    pllphase #(
+        .PLL_COUNTER(3'b100)  // C2 counter for pin_extadc2_clk
+        ) pll_phase_adjust(
+        .clk(slow_clk),
+
+        .phasecounterselect(pll_phasecounterselect), .phasestep(pll_phasestep),
+        .phaseupdown(pll_phaseupdown), .scanclk(pll_scanclk),
+        .phasedone(pll_phasedone),
+
+        .wb_stb_i(pp_wb_stb_i), .wb_cyc_i(pp_wb_cyc_i), .wb_we_i(pp_wb_we_i),
+        .wb_adr_i(pp_wb_adr_i), .wb_dat_i(pp_wb_dat_i),
+        .wb_dat_o(pp_wb_dat_o), .wb_ack_o(pp_wb_ack_o)
+        );
+
     // Low speed bus routing
     buslsdispatch bus_low_speed_dispatcher(
         .clk(clk), .slow_clk(slow_clk),
@@ -365,7 +391,12 @@ module haasoscope (
         .i2c_wb_stb_o(i2c_wb_stb_i), .i2c_wb_cyc_o(i2c_wb_cyc_i),
         .i2c_wb_we_o(i2c_wb_we_i),
         .i2c_wb_adr_o(i2c_wb_adr_i), .i2c_wb_dat_o(i2c_wb_dat_i),
-        .i2c_wb_dat_i(i2c_wb_dat_o), .i2c_wb_ack_i(i2c_wb_ack_o)
+        .i2c_wb_dat_i(i2c_wb_dat_o), .i2c_wb_ack_i(i2c_wb_ack_o),
+
+        .pp_wb_stb_o(pp_wb_stb_i), .pp_wb_cyc_o(pp_wb_cyc_i),
+        .pp_wb_we_o(pp_wb_we_i),
+        .pp_wb_adr_o(pp_wb_adr_i), .pp_wb_dat_o(pp_wb_dat_i),
+        .pp_wb_dat_i(pp_wb_dat_o), .pp_wb_ack_i(pp_wb_ack_o)
         );
 
 endmodule
