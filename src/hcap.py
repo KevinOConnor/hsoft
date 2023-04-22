@@ -359,8 +359,10 @@ class PLLPhase:
             res = self.read_reg("pp", "status")
             if not res:
                 break
-    def setup(self):
+    def setup(self, is_interleaving):
         targetphase_ps = 0
+        if is_interleaving:
+            targetphase_ps = 4000 # four nanoseconds
         phasestep_ps = 100
         targetphase = targetphase_ps // phasestep_ps
         rp = self.read_reg("pp", "req_phase")
@@ -395,6 +397,7 @@ class SQHelper:
         self.channel_div = 1
         self.query_rate = fpga_freq
         # Handling of measurements within each sample queue entry
+        self.interleave = False
         self.meas_bits = 8
         self.meas_mask = 0xff
         self.meas_base = 0
@@ -434,6 +437,9 @@ class SQHelper:
         return float(val) * mult
     def note_cmdline_options(self, options):
         qrate = self._parse_hz(options.queryrate)
+        if qrate == 250000000.:
+            self.interleave = True
+            qrate /= 2.
         meas_bits = options.bits
         if meas_bits not in DEPOSIT_TYPES:
             sys.stdout.write("Available bit modes: %s\n"
@@ -448,25 +454,29 @@ class SQHelper:
         self.csvfilename = csvfilename
     def _note_frame_data(self, msgdata):
         self.frame_datas.append(msgdata)
+    def is_interleaving(self):
+        return self.interleave
     def get_status(self):
-        return ("Hz=%.0f preface=%.6fs duration=%.6f\n"
+        return ("Hz=%.0f interleave=%d preface=%.6fs duration=%.6f\n"
                 "  meas_sum=%d meas_bits=%d meas_mask=%x meas_base=%d\n"
-                % (self.fpga_freq / self.channel_div,
+                % (self.fpga_freq / self.channel_div, self.interleave,
                    self.preface_time, self.frame_time,
                    self.do_meas_sum, self.meas_bits,
                    self.meas_mask, self.meas_base))
     def _parse_frame_data(self, frame_slot):
         # Map active channels
+        interleave = self.interleave
         cmap = []
-        hdr = []
+        hdr_desc = []
         num_channels = 0
         for ch, ah in enumerate(self.af_helpers):
+            hdr = "unused%d" % (ch,)
             if ah.check_is_capturing():
                 cmap.append((ah, ch, num_channels * 4))
                 num_channels += 1
-                hdr.append("ch%d" % (ch,))
-            else:
-                hdr.append("unused%d" % (ch,))
+                if not interleave or ch < 2:
+                    hdr = "ch%d" % (ch,)
+            hdr_desc.append(hdr)
         # Handle multiple measurements in each sample queue entry
         meas_per_sample, meas_shift, meas_code = DEPOSIT_TYPES[self.meas_bits]
         meas_mask = self.meas_mask
@@ -481,6 +491,8 @@ class SQHelper:
         sample_count -= skip_start
         sample_count -= sample_count % num_channels
         stime = float(self.channel_div) / self.fpga_freq
+        if interleave:
+            stime /= 2.
         total_lines = sample_count // num_channels * meas_per_sample
         sys.stdout.write("Total bytes %d (%d sample queue) %d lines (%.9fs)\n"
                          % (len(frame_data), len(frame_data)//4,
@@ -493,7 +505,7 @@ class SQHelper:
         for ah in self.af_helpers:
             sts = ah.get_status()
             hdrs.extend([("; " + s).strip() for s in sts.split('\n')])
-        hdrs.append("time,%s" % (",".join(hdr)))
+        hdrs.append("time,%s" % (",".join(hdr_desc)))
         hdrs.append("")
         header = "\n".join(hdrs)
         # Create file
@@ -514,10 +526,17 @@ class SQHelper:
                     m = (d >> ((j * meas_shift) & 0x1f)) & meas_mask
                     v = ah.calc_probe_volt(m * meas_mult)
                     line_data[meas_per_sample - 1 - j][ch] = v
-            for ld in line_data:
-                csvf.write("%.9f,%.6f,%.6f,%.6f,%.6f\n"
-                           % (line_num*stime, ld[0], ld[1], ld[2], ld[3]))
-                line_num += 1
+            if interleave:
+                for ld in line_data:
+                    csvf.write("%.9f,%.6f,%.6f,0,0\n%.9f,%.6f,%.6f,0,0\n"
+                               % (line_num*stime, ld[0], ld[1],
+                                  (line_num+1)*stime, ld[2], ld[3]))
+                    line_num += 2
+            else:
+                for ld in line_data:
+                    csvf.write("%.9f,%.6f,%.6f,%.6f,%.6f\n"
+                               % (line_num*stime, ld[0], ld[1], ld[2], ld[3]))
+                    line_num += 1
         csvf.write("; End of capture (%d data lines)\n" % (line_num,))
         csvf.close()
     def _calc_meas_mask(self):
@@ -616,11 +635,13 @@ PROBES = {
 
 # Haasoscope analog frontend configuration helper
 class AFHelper:
-    def __init__(self, serialhdl, dac, ioexp1, channel):
+    def __init__(self, serialhdl, dac, ioexp1, channel, interleave_channel):
         self.serialhdl = serialhdl
         self.dac = dac
         self.ioexp1 = ioexp1
         self.channel = channel
+        self.interleave_channel = interleave_channel
+        self.interleave = False
         self.sw_imp10Mohm = self.sw_gain100 = False
         self.ac_isolate = self.is_gain10 = False
         self.dac_v = self.base_adc = self.base_v = self.adc_factor = 0.
@@ -688,10 +709,13 @@ class AFHelper:
         tvolt = float(val)
         return tcode | 0x01, tvolt
     def note_cmdline_options(self, options):
+        channel = self.channel
+        if self.interleave:
+            channel = self.interleave_channel
         channels_desc = getattr(options, "channels")
         channels = self._parse_channels(channels_desc)
-        self.is_capturing = (self.channel in channels)
-        prefix = "ch%d" % (self.channel,)
+        self.is_capturing = (channel in channels)
+        prefix = "ch%d" % (channel,)
         mode_desc = getattr(options, prefix)
         self.ac_isolate, self.is_gain10 = self._parse_channel_mode(mode_desc)
         probe_desc = getattr(options, prefix + "probe")
@@ -702,6 +726,8 @@ class AFHelper:
     def note_switches(self, sw_imp10Mohm, sw_gain100):
         self.sw_imp10Mohm = sw_imp10Mohm
         self.sw_gain100 = sw_gain100
+    def note_interleaving(self, is_interleaving):
+        self.interleave = is_interleaving
     def have_trigger(self):
         return self.trigger_code != 0
     def check_is_capturing(self):
@@ -735,9 +761,18 @@ class AFHelper:
             sys.stdout.write("WARN: 100x mode and 50ohm mode not supported\n")
         # Configure channel settings
         suffix = "_ch%d" % (self.channel,)
-        self.ioexp1.set_output("dc_connect" + suffix, not self.ac_isolate)
-        self.ioexp1.set_output("gain" + suffix, self.is_gain10)
-        self.dac.set_dac(self.channel, self.dac_v)
+        dc_connect = is_gain10 = False
+        dac_v = 0.
+        is_active = self.is_capturing or self.trigger_code
+        if self.interleave and self.interleave_channel != self.channel:
+            is_active = False
+        if is_active:
+            dc_connect = not self.ac_isolate
+            is_gain10 = self.is_gain10
+            dac_v = self.dac_v
+        self.ioexp1.set_output("dc_connect" + suffix, dc_connect)
+        self.ioexp1.set_output("gain" + suffix, is_gain10)
+        self.dac.set_dac(self.channel, dac_v)
         # Setup trigger
         modname = "ch%d" % (self.channel,)
         self.serialhdl.write_reg(modname, "trigger", 0x00)
@@ -798,16 +833,17 @@ class HProcessor:
             else:
                 ioexp.set_output(pin_name, 0)
         # analog frontend helpers
-        self.af_helpers = [AFHelper(self.serialhdl, self.dac, self.ioexp1, ch)
-                           for ch in range(4)]
+        self.af_helpers = [AFHelper(self.serialhdl, self.dac, self.ioexp1,
+                                    ch, ch % 2) for ch in range(4)]
     def setup_cmdline_options(self, opts):
+        self.sqhelper.setup_cmdline_options(opts)
         for afh in self.af_helpers:
             afh.setup_cmdline_options(opts)
-        self.sqhelper.setup_cmdline_options(opts)
     def note_cmdline_options(self, options, args):
-        for afh in self.af_helpers:
-            afh.note_cmdline_options(options)
         self.sqhelper.note_cmdline_options(options)
+        for afh in self.af_helpers:
+            afh.note_interleaving(self.sqhelper.is_interleaving())
+            afh.note_cmdline_options(options)
     def note_filename(self, csvfilename):
         self.sqhelper.note_filename(csvfilename)
     def run(self, ser):
@@ -815,15 +851,16 @@ class HProcessor:
         self.sqhelper.setup()
         self.adcspi.setup()
         self.i2c.setup(FPGA_SLOW_FREQ)
-        self.pllphase.setup()
+        self.pllphase.setup(self.sqhelper.is_interleaving())
         # configure mcp23017 gpio expander 2
         self.ioexp2.set_output("led0", 1)
         self.ioexp2.update_pins()
         self.ioexp2.read_pins()
         self.ioexp2.dump_pins()
         # Setup channels
-        self.ioexp1.set_output("enable_ch2", 1)
-        self.ioexp1.set_output("enable_ch3", 1)
+        interleave = self.sqhelper.is_interleaving()
+        self.ioexp1.set_output("enable_ch2", not interleave)
+        self.ioexp1.set_output("enable_ch3", not interleave)
         force_trigger = True
         for ch in range(4):
             ah = self.af_helpers[ch]
