@@ -187,6 +187,18 @@ class SerialHandler:
                     | (self._tx_message(0x00, addr + 1, 0x00) << 8))
         else:
             return self._tx_message(0x00, addr, 0x00)
+    def dump_registers(self, modname=None):
+        if modname is None:
+            all_mods = self.modregs.items()
+            all_mods = sorted([(adr, mn) for mn, (adr, regs) in all_mods])
+            for adr, modname in all_mods:
+                self.dump_registers(modname)
+            return
+        adr, regs = self.modregs[modname]
+        regs = [(radr, rn) for rn, (radr, rs) in regs.items()]
+        for radr, regname in sorted(regs):
+            v = self.read_reg(modname, regname)
+            sys.stdout.write("%s: %s: %x\n" % (modname, regname, v))
     def setup(self, ser):
         self.ser = ser
         self.register_stream(0x60, self._handle_response)
