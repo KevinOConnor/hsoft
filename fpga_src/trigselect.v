@@ -1,4 +1,4 @@
-// Select sample to add to samples queue
+// Propagate trigger signals to a global trigger indicator
 //
 // Copyright (C) 2023  Kevin O'Connor <kevin@koconnor.net>
 //
