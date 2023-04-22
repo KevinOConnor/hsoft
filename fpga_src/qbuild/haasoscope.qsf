@@ -49,6 +49,7 @@ set_global_assignment -name VERILOG_FILE ../cmdhandle/serialcmd.v
 set_global_assignment -name VERILOG_FILE ../busdispatch.v
 set_global_assignment -name VERILOG_FILE ../wb/wb_async_reg.v
 set_global_assignment -name VERILOG_FILE ../buslsdispatch.v
+set_global_assignment -name VERILOG_FILE ../codeversion.v
 
 set_location_assignment PIN_27 -to pin_ext_osc
 set_global_assignment -name QIP_FILE ../main_pll/main_pll.qip

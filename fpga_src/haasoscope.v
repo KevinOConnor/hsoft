@@ -288,6 +288,20 @@ module haasoscope (
         .altclk_wb_dat_i(altclk_wb_dat_o), .altclk_wb_ack_i(altclk_wb_ack_o)
         );
 
+    // Export code revision information
+    wire vers_wb_stb_i, vers_wb_cyc_i, vers_wb_we_i;
+    wire [15:0] vers_wb_adr_i;
+    wire [7:0] vers_wb_dat_i;
+    wire [7:0] vers_wb_dat_o;
+    wire vers_wb_ack_o;
+    codeversion code_version(
+        .clk(slow_clk),
+        .wb_stb_i(vers_wb_stb_i), .wb_cyc_i(vers_wb_cyc_i),
+        .wb_we_i(vers_wb_we_i),
+        .wb_adr_i(vers_wb_adr_i), .wb_dat_i(vers_wb_dat_i),
+        .wb_dat_o(vers_wb_dat_o), .wb_ack_o(vers_wb_ack_o)
+        );
+
     // MAX19506 SPI message sending
     wire adcspi_wb_stb_i, adcspi_wb_cyc_i, adcspi_wb_we_i;
     wire [15:0] adcspi_wb_adr_i;
@@ -337,6 +351,11 @@ module haasoscope (
         .wb_we_i(altclk_wb_we_i),
         .wb_adr_i(altclk_wb_adr_i), .wb_dat_i(altclk_wb_dat_i),
         .wb_dat_o(altclk_wb_dat_o), .wb_ack_o(altclk_wb_ack_o),
+
+        .vers_wb_stb_o(vers_wb_stb_i), .vers_wb_cyc_o(vers_wb_cyc_i),
+        .vers_wb_we_o(vers_wb_we_i),
+        .vers_wb_adr_o(vers_wb_adr_i), .vers_wb_dat_o(vers_wb_dat_i),
+        .vers_wb_dat_i(vers_wb_dat_o), .vers_wb_ack_i(vers_wb_ack_o),
 
         .adcspi_wb_stb_o(adcspi_wb_stb_i), .adcspi_wb_cyc_o(adcspi_wb_cyc_i),
         .adcspi_wb_we_o(adcspi_wb_we_i),

@@ -12,6 +12,11 @@ module buslsdispatch (
     input [15:0] wb_adr_i, input [7:0] wb_dat_i,
     output [7:0] wb_dat_o, output wb_ack_o,
 
+    // Code version reporting module
+    output reg vers_wb_stb_o, output vers_wb_cyc_o, output vers_wb_we_o,
+    output [15:0] vers_wb_adr_o, output [7:0] vers_wb_dat_o,
+    input [7:0] vers_wb_dat_i, input vers_wb_ack_i,
+
     // ADC SPI module
     output reg adcspi_wb_stb_o, output adcspi_wb_cyc_o, output adcspi_wb_we_o,
     output [15:0] adcspi_wb_adr_o, output [7:0] adcspi_wb_dat_o,
@@ -43,6 +48,11 @@ module buslsdispatch (
         .wbs_dat_i(ls_dat_o), .wbs_ack_i(ls_ack_o)
         );
 
+    // Code version reporting module
+    localparam VERS_ADDR = 8'h00;
+    assign vers_wb_cyc_o=ls_cyc_i, vers_wb_we_o=ls_we_i;
+    assign vers_wb_adr_o=ls_adr_i, vers_wb_dat_o=ls_dat_i;
+
     // ADC spi
     localparam ADCSPI_ADDR = 8'h01;
     assign adcspi_wb_cyc_o=ls_cyc_i, adcspi_wb_we_o=ls_we_i;
@@ -54,10 +64,16 @@ module buslsdispatch (
     assign i2c_wb_adr_o=ls_adr_i, i2c_wb_dat_o=ls_dat_i;
 
     always @(*) begin
+        vers_wb_stb_o = 0;
         adcspi_wb_stb_o = 0;
         i2c_wb_stb_o = 0;
 
         case (ls_adr_i[15:8])
+        VERS_ADDR: begin
+            vers_wb_stb_o = ls_stb_i;
+            ls_dat_o = vers_wb_dat_i;
+            ls_ack_o = vers_wb_ack_i;
+        end
         ADCSPI_ADDR: begin
             adcspi_wb_stb_o = ls_stb_i;
             ls_dat_o = adcspi_wb_dat_i;

@@ -205,8 +205,10 @@ class SerialHandler:
         # Verify connection and obtain initial sequence numbers
         self._flush_connection()
         self.no_seq_warnings = True
-        self.read_reg("adcspi", "state") # Dummy read
+        vers = self.read_reg("vers", "code_version")
         self.no_seq_warnings = False
+        sys.stdout.write("FPGA code version: %d.%d.%d\n"
+                         % (vers >> 16, (vers >> 8) & 0xff, vers & 0xff))
 
 
 ######################################################################

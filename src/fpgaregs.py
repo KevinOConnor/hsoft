@@ -36,6 +36,12 @@ SAMPLE_QUEUE_REGS = {
 }
 FPGA_MODULES["sq"] = (0x87, SAMPLE_QUEUE_REGS)
 
+# Code version module
+VERS_REGS = {
+    "code_version": (0x00, 4),
+}
+FPGA_MODULES["vers"] = (0x00, VERS_REGS)
+
 # ADC SPI configuration
 ADC_SPI_REGS = {
     "state": (0x00, 1),
