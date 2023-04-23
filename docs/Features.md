@@ -3,8 +3,9 @@ code.
 
 # Features
 
-- Support for reading ADC measurements at up to 125Mhz on all 4
-  Haasoscope channels.
+- Support for reading ADC measurements at up to 125Mhz on all four
+  Haasoscope channels or capturing at 250Mhz on the first two
+  channels.
 
 - Either the on-board USB full-speed or the optional USB hi-speed
   adapter "hat" may be used.  The FPGA can fully saturate the hi-speed
@@ -28,7 +29,7 @@ code.
   can saturate a hi-speed USB interface, the Python based host
   software is unlikely to read the data as fast.  Also, the host
   capture software collects all capture data in memory before writing
-  it to disk, which may not be optimal for very large captures.
+  it to disk, which may not be optimal for large captures.
 
 - Each Haasoscope may benefit from calibration data.  There is
   currently no calibration tool available.  Ideally there would be an
@@ -38,9 +39,6 @@ code.
 - It would be useful to support flashing new FPGA images over a
   standard USB interface (and thus not require a "USB blaster" tool to
   update the image).
-
-- The current code does not support 250Mhz "interleaved" measurement
-  mode.
 
 - There is currently no support for capturing digital measurements
   using the Haasoscope digital input pins.

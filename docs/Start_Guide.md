@@ -131,6 +131,12 @@ Using the USB hi-speed adapter can also extend the total capture time.
 If the USB interface is able to extract measurements faster than they
 are recorded then one can effectively stream data from the device.
 
+# Enabling 250Mhz mode
+
+Specify `-q 250Mhz` to enable 250Mhz sampling mode.  In this mode only
+`ch0` and `ch1` are available (`ch2` and `ch3` can not capture data
+nor signal a trigger).
+
 # Using the USB hi-speed adapter
 
 One can also perform a capture using the optional USB hi-speed
