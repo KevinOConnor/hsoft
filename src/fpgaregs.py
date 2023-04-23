@@ -60,3 +60,11 @@ I2C_REGS = {
     "sr": (0x04, 1), # read-only alias of "cr"
 }
 FPGA_MODULES["i2c"] = (0x02, I2C_REGS)
+
+# PLL phase configuration
+PP_REGS = {
+    "status": (0x00, 1),
+    "req_phase": (0x01, 1),
+    "cur_phase": (0x02, 1),
+}
+FPGA_MODULES["pp"] = (0x03, PP_REGS)

@@ -257,7 +257,7 @@ class I2CHelper:
 
 
 ######################################################################
-# External chip helpers
+# Chip helpers
 ######################################################################
 
 # IO expander helper
@@ -348,6 +348,28 @@ class Max19506spi:
         self.send_spi(0x05, 0x00) # Default 50 Ohm on ChB data pins
         self.send_spi(0x06, 0x10) # "offset binary" output
         self.send_spi(0x08, 0x00) # Default voltage modes (0.9V)
+
+# Set the PLL phase of the extadc2 clock
+class PLLPhase:
+    def __init__(self, serialhdl):
+        self.read_reg = serialhdl.read_reg
+        self.write_reg = serialhdl.write_reg
+    def wait_phase_ready(self):
+        while 1:
+            res = self.read_reg("pp", "status")
+            if not res:
+                break
+    def setup(self):
+        targetphase_ps = 0
+        phasestep_ps = 100
+        targetphase = targetphase_ps // phasestep_ps
+        rp = self.read_reg("pp", "req_phase")
+        if rp == targetphase:
+            return
+        sys.stdout.write("Setting extadc2 clock phase\n")
+        self.wait_phase_ready()
+        self.write_reg("pp", "req_phase", targetphase)
+        self.wait_phase_ready()
 
 
 ######################################################################
@@ -762,6 +784,7 @@ class HProcessor:
         self.adcspi = Max19506spi(self.serialhdl)
         self.i2c = i2c = I2CHelper(self.serialhdl)
         self.dac = mcp4728(i2c.send_i2c, I2C_DAC_ADDR)
+        self.pllphase = PLLPhase(self.serialhdl)
         # gpio expanders
         self.ioexp1 = mcp23017(i2c.send_i2c, I2C_EXP1_ADDR, PINS_IOEXP1)
         self.ioexp2 = mcp23017(i2c.send_i2c, I2C_EXP2_ADDR, PINS_IOEXP2)
@@ -792,6 +815,7 @@ class HProcessor:
         self.sqhelper.setup()
         self.adcspi.setup()
         self.i2c.setup(FPGA_SLOW_FREQ)
+        self.pllphase.setup()
         # configure mcp23017 gpio expander 2
         self.ioexp2.set_output("led0", 1)
         self.ioexp2.update_pins()
