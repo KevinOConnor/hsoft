@@ -215,11 +215,14 @@ class SerialHandler:
 # I2C helper
 ######################################################################
 
+class i2c_error(Exception):
+    pass
+
 class I2CHelper:
     def __init__(self, serialhdl):
         self.read_reg = serialhdl.read_reg
         self.write_reg = serialhdl.write_reg
-    def send_i2c_byte(self, cmdflags, data=None):
+    def _send_i2c_byte(self, cmdflags, data=None):
         if not (cmdflags & (1<<5)):
             self.write_reg("i2c", "txr", data)
         self.write_reg("i2c", "cr", cmdflags)
@@ -228,26 +231,38 @@ class I2CHelper:
             if not (res & (1<<1)):
                 # Complete
                 break
-    def send_i2c(self, addr, write, read_count=0):
+        expected_res = (cmdflags & (1<<6)) ^ (1<<6)
+        if (res & ~(0x01)) != expected_res:
+            if expected_res:
+                self.write_reg("i2c", "cr", 1<<6)
+            raise i2c_error("i2c send fault")
+    def _try_send_i2c(self, addr, write, read_count=0):
         addrwr = addr << 1
         if write:
-            self.send_i2c_byte((1<<7) | (1<<4), addrwr)
+            self._send_i2c_byte((1<<7) | (1<<4), addrwr)
             for i, b in enumerate(write):
                 cmdflags = 1<<4
                 if not read_count and i == len(write) - 1:
                     cmdflags |= 1<<6
-                self.send_i2c_byte(cmdflags, b)
+                self._send_i2c_byte(cmdflags, b)
         res = []
         if read_count:
-            self.send_i2c_byte((1<<7) | (1<<4), addrwr | 1)
+            self._send_i2c_byte((1<<7) | (1<<4), addrwr | 1)
             for i in range(read_count):
                 cmdflags = 1<<5
                 if i == read_count - 1:
                     cmdflags |= (1<<6) | (1<<3)
-                self.send_i2c_byte(cmdflags)
+                self._send_i2c_byte(cmdflags)
                 res.append(self.read_reg("i2c", "rxr"))
         #sys.stdout.write("i2c 0x%02x %s is %s\n" % (addr, write, res))
         return res
+    def send_i2c(self, addr, write, read_count=0):
+        while 1:
+            try:
+                return self._try_send_i2c(addr, write, read_count)
+            except i2c_error as e:
+                sys.stdout.write("i2c send fail to addr %02x\n" % (addr,))
+                time.sleep(0.001)
     def setup(self, fpga_freq):
         i2c_freq = 100000
         self.write_reg("i2c", "ctr", 0x00)
