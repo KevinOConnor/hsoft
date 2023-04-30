@@ -198,7 +198,7 @@ class SerialHandler:
         regs = [(radr, rn) for rn, (radr, rs) in regs.items()]
         for radr, regname in sorted(regs):
             v = self.read_reg(modname, regname)
-            sys.stdout.write("%s: %s: %x\n" % (modname, regname, v))
+            sys.stdout.write("%s: %s: 0x%02x\n" % (modname, regname, v))
     def setup(self, ser):
         self.ser = ser
         self.register_stream(0x60, self._handle_response)
