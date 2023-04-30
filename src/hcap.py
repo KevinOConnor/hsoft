@@ -37,6 +37,7 @@ class SerialHandler:
         self.need_scan = False
         self.read_finish = 0.
         self.data = bytearray()
+        self.bulk_read_mode = False
         # Callbacks
         self.handlers = {}
         # Command tracking
@@ -46,6 +47,8 @@ class SerialHandler:
             del self.handlers[strm_id]
             return
         self.handlers[strm_id] = callback
+    def set_bulk_mode(self, bulk_read_mode):
+        self.bulk_read_mode = bulk_read_mode
     def _warn(self, msg):
         sys.stdout.write("WARN: %s\n" % (msg,))
     def _default_stream(self, msg):
@@ -57,19 +60,40 @@ class SerialHandler:
         self.cmd = self.cmd_result = None
     def read_data(self, read_finish):
         self.read_finish = read_finish
+        bulk_read_mode = self.bulk_read_mode
+        reads = []
+        reads_pos = 0
         data = self.data
         dpos = 0
         msglen = 0
         while 1:
             if len(data) - dpos < msglen + 6:
-                data[:dpos] = []
-                dpos = 0
+                if len(reads) > reads_pos:
+                    data.extend(reads[reads_pos])
+                    reads_pos += 1
+                    continue
+                if reads_pos:
+                    reads[:] = []
+                    reads_pos = 0
+                if dpos:
+                    data[:dpos] = []
+                    dpos = 0
                 curtime = time.time()
                 if curtime >= self.read_finish:
                     return
                 # Read data
-                d = self.ser.read(64 * 1024 * 1024)
-                data.extend(d)
+                retry_read = False
+                while 1:
+                    d = self.ser.read(16 * 1024)
+                    if d:
+                        reads.append(d)
+                        if not self.bulk_read_mode:
+                            break
+                        retry_read = True
+                        continue
+                    if not retry_read:
+                        break
+                    retry_read = False
                 continue
             if self.need_scan:
                 drop = len(data)
@@ -600,6 +624,7 @@ class SQHelper:
         # Query fifo data
         self.serialhdl.register_stream(0x61, self._note_frame_data)
         self.serialhdl.read_data(time.time() + 0.020)
+        self.serialhdl.set_bulk_mode(True)
         sys.stdout.write(" START CAPTURE\n")
         start_time = time.time()
         if force_trigger:
@@ -619,6 +644,7 @@ class SQHelper:
                 break
         frame_pos = self.read_reg("sq", "reg_fifo_position")
         sys.stdout.write(" FINALIZE CAPTURE\n")
+        self.serialhdl.set_bulk_mode(False)
         self.write_reg("sq", "status", 0x00)
         frame_diff = frame_pos - start_pos - frame_prefix - 1
         frame_slot = frame_diff & 0xffffffff
