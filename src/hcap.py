@@ -522,19 +522,20 @@ class SQHelper:
         meas_mult = 1.
         if self.do_meas_sum:
             meas_mult = 1. / self.channel_div
-        # Combine messages into one bytearray()
-        frame_data = bytearray().join(self.frame_datas)
         # Skip unaligned reports at start and end of data
-        sample_count = len(frame_data) // 4
+        frame_datas = self.frame_datas
+        total_bytes = sum([len(fd) for fd in frame_datas])
+        sample_count = total_bytes // 4
         skip_start = (num_channels - (frame_slot % num_channels)) % num_channels
         sample_count -= skip_start
         sample_count -= sample_count % num_channels
         stime = float(self.channel_div) / self.fpga_freq
         if interleave:
             stime /= 2.
-        total_lines = sample_count // num_channels * meas_per_sample
+        total_sample_groups = sample_count // num_channels
+        total_lines = total_sample_groups * meas_per_sample
         sys.stdout.write("Total bytes %d (%d sample queue) %d lines (%.9fs)\n"
-                         % (len(frame_data), len(frame_data)//4,
+                         % (total_bytes, total_bytes//4,
                             total_lines, total_lines * stime))
         # CSV file header
         hdrs = ["; HSoft data capture '%s'" % (time.asctime(),)]
@@ -551,13 +552,23 @@ class SQHelper:
         csvf = io.open(self.csvfilename, "w")
         csvf.write(header)
         # Write data to file
+        frame_data = bytearray()
+        frames_pos = 0
         line_data = [[0.] * 4 for i in range(meas_per_sample)]
-        line_num = 0
+        line_num = sample_group_num = 0
         base_pos = skip_start * 4
-        for i in range(sample_count // num_channels):
-            bpos = base_pos + i * 4 * num_channels
+        while sample_group_num < total_sample_groups:
+            # Check if need to extract more data
+            if len(frame_data) < base_pos + 4 * num_channels:
+                if base_pos and len(frame_data) > base_pos:
+                    frame_data[:base_pos] = []
+                    base_pos = 0
+                frame_data.extend(frame_datas[frames_pos])
+                frames_pos += 1
+                continue
+            # Find measurements for this "group" of data
             for ah, ch, offset in cmap:
-                spos = bpos + offset
+                spos = base_pos + offset
                 d = (frame_data[spos] | (frame_data[spos+1] << 8)
                      | (frame_data[spos+2] << 16) | (frame_data[spos+3] << 24))
                 d = d | (d << 32)
@@ -565,6 +576,9 @@ class SQHelper:
                     m = (d >> ((j * meas_shift) & 0x1f)) & meas_mask
                     v = ah.calc_probe_volt(m * meas_mult)
                     line_data[meas_per_sample - 1 - j][ch] = v
+            sample_group_num += 1
+            base_pos += 4 * num_channels
+            # Write line to csv file
             if interleave:
                 for ld in line_data:
                     csvf.write("%.9f,%.6f,%.6f,0,0\n%.9f,%.6f,%.6f,0,0\n"
