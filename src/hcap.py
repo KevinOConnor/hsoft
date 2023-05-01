@@ -961,6 +961,7 @@ def setup_ft232h(serialport):
     ser = Ftdi.create_from_url("ftdi://::%s/%d" % (serialport, 1))
     ser.reset()
     ser.set_bitmode(0xff, Ftdi.BitMode.SYNCFF)
+    ser.read_data_set_chunksize(0x10000)
     ser.purge_buffers()
     ser.write = ser.write_data
     ser.read = ser.read_data
