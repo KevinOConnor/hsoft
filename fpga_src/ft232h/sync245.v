@@ -50,16 +50,17 @@ module sync245(
     assign tx_pull = !ft_txen && !ft_wrn;
 
     // Transmit flush indicator
-    reg need_flush = 0;
+    reg [3:0] flush_timer = 0;
+    wire could_flush = flush_timer && !ft_txen && !tx_avail && !rx_avail;
     always @(posedge ft_clkout) begin
         if (tx_pull)
-            need_flush <= 1;
-        else if (!ft_siwun)
-            need_flush <= 0;
+            flush_timer <= 1;
+        else if (could_flush)
+            flush_timer <= flush_timer + 1'b1;
     end
     reg siwun = 1;
     always @(posedge ft_clkout)
-        siwun <= !(need_flush && !ft_txen && !tx_avail && !rx_avail);
+        siwun <= !(could_flush && flush_timer == 15 && !tx_pull);
     assign ft_siwun = siwun;
 
     // Power enable
