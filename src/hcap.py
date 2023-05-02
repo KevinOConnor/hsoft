@@ -626,7 +626,8 @@ class SQHelper:
             self.write_reg(chname, "status",
                            (is_capturing | (self.do_meas_sum << 1)
                             | (meas_code << 4)))
-        qrate = self.fpga_freq * num_channels / ( 4. * self.channel_div)
+        qrate = (self.fpga_freq * num_channels
+                 / (meas_per_sample * self.channel_div))
         frame_size = max(16, min(0xffffffff, int(self.frame_time * qrate)))
         self.write_reg("sq", "frame_size", frame_size)
         frame_prefix = max(8, min(0x1f00, int(self.preface_time * qrate)))
