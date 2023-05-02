@@ -1,0 +1,2 @@
+# Files produced by the build or tools that git should ignore
+*.pyc
