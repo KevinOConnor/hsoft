@@ -508,26 +508,34 @@ class SQHelper:
                    self.do_meas_sum, self.meas_bits,
                    self.meas_mask, self.meas_base))
     def _parse_frame_data(self, frame_slot):
-        # Map active channels
-        BYTES_PER_SAMPLE = 9
-        interleave = self.interleave
-        cmap = []
-        hdr_desc = []
-        num_channels = 0
-        for ch, ah in enumerate(self.af_helpers):
-            hdr = "unused%d" % (ch,)
-            if ah.check_is_capturing():
-                cmap.append((ah, ch, num_channels * BYTES_PER_SAMPLE))
-                num_channels += 1
-                if not interleave or ch < 2:
-                    hdr = "ch%d" % (ch,)
-            hdr_desc.append(hdr)
         # Handle multiple measurements in each sample queue entry
         meas_per_sample, meas_shift, meas_code = DEPOSIT_TYPES[self.meas_bits]
         meas_mask = self.meas_mask
         meas_mult = 1.
         if self.do_meas_sum:
             meas_mult = 1. / self.channel_div
+        # Build map of measurement sample offsets for each active channel
+        BYTES_PER_SAMPLE = 9
+        interleave = self.interleave
+        cmap = []
+        hdr_desc = ["unused%d" % (ch,) for ch in range(4)]
+        num_channels = 0
+        for ch, ah in enumerate(self.af_helpers):
+            if not ah.check_is_capturing():
+                continue
+            base_v, adc_factor = ah.get_adc_base_factor()
+            offset = num_channels * BYTES_PER_SAMPLE
+            adc_factor *= meas_mult
+            for j in range(meas_per_sample):
+                mnum = meas_per_sample - 1 - j
+                shift = (j * meas_shift) % 8
+                byte_start = (j * meas_shift) // 8
+                offsets = [offset + (byte_start + k) % BYTES_PER_SAMPLE
+                           for k in range(3)]
+                cmap.append((ch, mnum, offsets, shift, base_v, adc_factor))
+            num_channels += 1
+            if not interleave or ch < 2:
+                hdr_desc[ch] = "ch%d" % (ch,)
         # Skip unaligned reports at start and end of data
         frame_datas = self.frame_datas
         total_bytes = sum([len(fd) for fd in frame_datas])
@@ -573,16 +581,13 @@ class SQHelper:
                 frames_pos += 1
                 continue
             # Find measurements for this "group" of data
-            for ah, ch, offset in cmap:
-                spos = base_pos + offset
-                d = sum([frame_data[spos+i] << (8*i)
-                         for i in range(BYTES_PER_SAMPLE)])
-                d |= (d << (8*BYTES_PER_SAMPLE))
-                for j in range(meas_per_sample):
-                    m = (d >> ((j * meas_shift)
-                               % (8*BYTES_PER_SAMPLE))) & meas_mask
-                    v = ah.calc_probe_volt(m * meas_mult)
-                    line_data[meas_per_sample - 1 - j][ch] = v
+            for ch, mnum, (off0, off1, off2), shift, base_v, adc_factor in cmap:
+                d = (frame_data[base_pos+off0]
+                     | (frame_data[base_pos+off1] << 8)
+                     | (frame_data[base_pos+off2] << 16))
+                m = (d >> shift) & meas_mask
+                v = base_v + m * adc_factor
+                line_data[mnum][ch] = v
             sample_group_num += 1
             base_pos += BYTES_PER_SAMPLE * num_channels
             # Write line to csv file
@@ -707,7 +712,7 @@ class AFHelper:
         self.interleave = False
         self.sw_imp10Mohm = self.sw_gain100 = False
         self.ac_isolate = self.is_gain10 = False
-        self.dac_v = self.base_adc = self.base_v = self.adc_factor = 0.
+        self.dac_v = self.base_v = self.adc_factor = 0.
         self.trigger_code = 0
         self.trigger_volt = 0.
         self.is_capturing = False
@@ -759,8 +764,9 @@ class AFHelper:
             # Only use adc_factor in ac_isolate mode
             info = base_info
         self.dac_v = info['dac']
-        self.base_adc = info.get('adc', 255. / 2.)
-        self.base_v = info.get('voltage', 0.)
+        base_adc = info.get('adc', 255. / 2.)
+        calib_v = info.get('voltage', 0.)
+        self.base_v = calib_v - base_adc * self.adc_factor
     def _parse_trigger(self, val):
         val = val.strip()
         tcode = 0x04
@@ -795,11 +801,13 @@ class AFHelper:
         return self.trigger_code != 0
     def check_is_capturing(self):
         return self.is_capturing
+    def get_adc_base_factor(self):
+        return self.base_v, self.adc_factor
     def _calc_adc(self, probe_v):
-        adc_result = (probe_v - self.base_v) / self.adc_factor + self.base_adc
+        adc_result = (probe_v - self.base_v) / self.adc_factor
         return max(0, min(255, int(adc_result + 0.5)))
     def calc_probe_volt(self, adc_result):
-        probe_v = self.base_v + (adc_result - self.base_adc) * self.adc_factor
+        probe_v = self.base_v + adc_result * self.adc_factor
         return probe_v
     def get_status(self):
         trig = "None"
@@ -813,12 +821,12 @@ class AFHelper:
         max_v = self.calc_probe_volt(0)
         return ("channel%d: capturing=%d ac_isolate=%d"
                 " 50ohm=%d gain10x=%d gain100x=%d\n"
-                "  DAC=%.4fV base_adc=%.6f base_v=%.6fV adc_factor=%.6fV\n"
-                "  range=%.6fV:%.6fV trigger: %s\n"
+                "  DAC=%.4fV adc_factor=%.6fV range=%.6fV:%.6fV\n"
+                "  trigger: %s\n"
                 % (self.channel, self.is_capturing, self.ac_isolate,
                    not self.sw_imp10Mohm, self.is_gain10, self.sw_gain100,
-                   self.dac_v, self.base_adc, self.base_v, self.adc_factor,
-                   min_v, max_v, trig))
+                   self.dac_v, self.adc_factor, min_v, max_v,
+                   trig))
     def setup_channel(self):
         if not self.sw_imp10Mohm or self.sw_gain100:
             sys.stdout.write("WARN: 100x mode and 50ohm mode not supported\n")
