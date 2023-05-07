@@ -5,20 +5,21 @@ host capture software.
 
 The message protocol is a binary protocol.  All messages to and from
 the FPGA have the following format:
-`<1-byte msgid><1-byte seq><1-byte len> <n 32-bit data> <2-byte crc><1-byte sync>`
+`<1-byte msgid><2-byte lenseq><n-byte data><2-byte crc><1-byte sync>`
 
 The `msgid` indicates the type of content found in the remainder of
-the message.  The `seq` is a sequence number (currently using only the
-lower 6 bits).  The `len` field determines the number of 32-bit
-entries that will be contained in the following `data` field.  The
-`data` field contains data (as determined by the msgid field).  The
-`crc` field contains a 16-bit CRC-16-CCITT of the message (covering
-msgid to data).  The `sync` field is 0x7e.
+the message.  The `lenseq` is a 2-byte little endian encoded value
+containing a sequence number in the lower 6 bits and the data length
+in the top 10 bits. The data length determines the number of bytes
+contained in the following `data` field.  The `data` field contains
+data (the data contents are determined by the msgid field).  The `crc`
+field contains a 16-bit CRC-16-CCITT of the message (covering msgid to
+data).  The `sync` field is 0x7e.
 
 The following `msgid` are available:
 - REQUEST (0x52): Messages generated from the host capture software
-  intended for the FPGA.  There is always exactly one 32-bit data item
-  in these messages.  That data item has the following format:
+  intended for the FPGA.  There is always exactly four bytes of data
+  in these messages.  The data has the following format:
   `<1 byte write_flag><2-byte address><1-byte write_data>`
 
   The `write_flag` is either 0x80 to indicate a write to the given
@@ -30,9 +31,8 @@ The following `msgid` are available:
 
 - RESPONSE (0x60): Messages generated from the FPGA in response to a
   valid REQUEST message.  The FPGA generates this message for valid
-  read and valid write request messages.  There is always exactly one
-  32-bit data item in these messages.  That data item has the
-  following format:
+  read and valid write request messages.  There is always exactly four
+  bytes of data in these messages.  The data has the following format:
   `<1 byte read_data><1-byte req_seq><1-byte seq_err><1-byte zero>`
 
   The `read_data` contains the associated data from a valid read

@@ -65,9 +65,9 @@ class SerialHandler:
         reads_pos = 0
         data = self.data
         dpos = 0
-        msglen = 0
+        need_bytes = 6
         while 1:
-            if len(data) - dpos < msglen + 6:
+            if len(data) - dpos < need_bytes:
                 if len(reads) > reads_pos:
                     data.extend(reads[reads_pos])
                     reads_pos += 1
@@ -104,32 +104,34 @@ class SerialHandler:
                 self._warn("Discard %d bytes" % (drop,))
                 dpos += drop
                 continue
-            msghdr = data[dpos]
-            msgseq = data[dpos+1]
-            msglen = data[dpos+2] * 4
-            if msghdr & 0xf0 == 0x60:
-                if len(data) - dpos < msglen + 6:
+            msg_header = data[dpos]
+            msg_lenseq = data[dpos+1] | (data[dpos+2] << 8)
+            msg_datalen = msg_lenseq >> 6
+            need_bytes = msg_datalen + 6
+            if msg_header & 0xf0 == 0x60:
+                if len(data) - dpos < need_bytes:
                     # Need more data
                     continue
-                msgcrc = list(data[dpos+msglen+3:dpos+msglen+5])
-                msgterm = data[dpos+msglen+5]
-                if (msgterm == SCAN_CHAR
-                    and crc16_ccitt(data, dpos, dpos+msglen+3) == msgcrc):
+                msg_crc = list(data[dpos+msg_datalen+3:dpos+msg_datalen+5])
+                msg_seq = msg_lenseq & 0x3f
+                msg_term = data[dpos+msg_datalen+5]
+                if (msg_term == SCAN_CHAR
+                    and crc16_ccitt(data, dpos, dpos+msg_datalen+3) == msg_crc):
                     # Got valid response
-                    if msgseq != (self.rx_seq + 1) & 0x3f:
+                    if msg_seq != (self.rx_seq + 1) & 0x3f:
                         if not self.no_seq_warnings:
                             self._warn("Receive sequence mismatch (%d vs %d)"
-                                       % (msgseq, self.rx_seq))
-                    self.rx_seq = msgseq
-                    msgdata = data[dpos+3:dpos+msglen+3]
-                    dpos += msglen+6
-                    msglen = 0
+                                       % (msg_seq, self.rx_seq))
+                    self.rx_seq = msg_seq
+                    msg_data = data[dpos+3:dpos+msg_datalen+3]
+                    dpos += need_bytes
+                    need_bytes = 6
                     # Process data in callback
-                    hdlr = self.handlers.get(msghdr, self._default_stream)
-                    hdlr(msgdata)
+                    hdlr = self.handlers.get(msg_header, self._default_stream)
+                    hdlr(msg_data)
                     continue
             # Invalid data - rescan
-            msglen = 0
+            need_bytes = 6
             self.need_scan = True
     def _build_message(self, tx_seq, is_write, addr, val):
         msg = [REQ_HDR, tx_seq & 0x3f, 0x01,
