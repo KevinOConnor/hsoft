@@ -7,13 +7,13 @@
 module streamselect (
     input clk,
 
-    input [31:0] resp_data, input [7:0] resp_count,
+    input [7:0] resp_data, input [9:0] resp_count,
     input resp_avail, output resp_pull,
 
-    input [31:0] samp_stream_data, input [7:0] samp_stream_count,
+    input [7:0] samp_stream_data, input [9:0] samp_stream_count,
     input samp_stream_avail, output samp_stream_pull,
 
-    output [31:0] strm_data, output [7:0] strm_count,
+    output [7:0] strm_data, output [9:0] strm_count,
     output [3:0] strm_id, output strm_avail, input strm_pull,
 
     input [3:0] send_id

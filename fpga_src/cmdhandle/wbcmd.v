@@ -16,8 +16,8 @@ module wbcmd (
     input [7:0] wb_dat_i,
     input wb_ack_i,
 
-    output reg [31:0] resp_data, output [7:0] resp_count,
-    output reg resp_avail, input resp_pull
+    output reg [7:0] resp_data, output [9:0] resp_count,
+    output resp_avail, input resp_pull
     );
 
     // State tracking for command bus
@@ -40,21 +40,28 @@ module wbcmd (
     assign wb_cyc_o = wb_stb_o;
 
     // Command response state tracking
+    localparam REPLY_IDLE=2'd0, REPLY_SEQ=2'd1, REPLY_DATA=2'd2;
+    reg [1:0] reply_state;
+    reg [7:0] reply_data;
     always @(posedge clk) begin
-        if (!resp_avail || resp_pull) begin
+        if (reply_state == REPLY_IDLE) begin
             if (wb_stb_o && wb_ack_i) begin
                 // Command completed - generate a response
-                resp_avail <= 1;
-                resp_data <= {1'b0, 2'b0, recv_seq, wb_dat_i};
+                reply_state <= REPLY_DATA;
+                resp_data <= {1'b0, 1'b0, recv_seq};
+                reply_data <= wb_dat_i;
             end else if (req_stb_i && !valid_recv_seq) begin
                 // Incoming request had invalid sequence - send correct sequence
-                resp_avail <= 1;
-                resp_data <= {1'b1, 2'b0, recv_seq, 8'b0};
-            end else begin
-                resp_avail <= 0;
+                reply_state <= REPLY_DATA;
+                resp_data <= {1'b1, 1'b0, recv_seq};
+                reply_data <= 8'b0;
             end
+        end else if (resp_pull) begin
+            reply_state <= reply_state - 1'b1;
+            resp_data <= reply_data;
         end
     end
-    assign resp_count = resp_avail;
+    assign resp_avail = reply_state != REPLY_IDLE;
+    assign resp_count = reply_state;
 
 endmodule

@@ -13,7 +13,7 @@ module serialcmd (
     input [7:0] usbhi_rx_data, input usbhi_rx_avail,
     output [7:0] usbhi_tx_data, output usbhi_tx_avail, input usbhi_tx_pull,
 
-    input [31:0] samp_stream_data, input [7:0] samp_stream_count,
+    input [7:0] samp_stream_data, input [9:0] samp_stream_count,
     input samp_stream_avail, output samp_stream_pull,
 
     output wb_stb_o, output wb_cyc_o, output wb_we_o,
@@ -69,8 +69,8 @@ module serialcmd (
         );
 
     // Generate wishbone bus request for incoming commands
-    wire [31:0] resp_data;
-    wire [7:0] resp_count;
+    wire [7:0] resp_data;
+    wire [9:0] resp_count;
     wire resp_avail, resp_pull;
     wbcmd wishbone_command(
         .clk(clk),
@@ -87,8 +87,8 @@ module serialcmd (
         );
 
     // Tx content selection
-    wire [31:0] strm_data;
-    wire [7:0] strm_count;
+    wire [7:0] strm_data;
+    wire [9:0] strm_count;
     wire [3:0] strm_id;
     wire strm_avail, strm_pull;
     wire [3:0] send_id;

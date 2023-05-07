@@ -86,8 +86,8 @@ module haasoscope (
         );
 
     // Command building
-    wire [31:0] samp_stream_data;
-    wire [7:0] samp_stream_count;
+    wire [7:0] samp_stream_data;
+    wire [9:0] samp_stream_count;
     wire samp_stream_avail, samp_stream_pull;
     wire wb_stb_o, wb_cyc_o, wb_we_o;
     wire [15:0] wb_adr_o;

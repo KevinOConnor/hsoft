@@ -7,7 +7,7 @@
 module msgencode (
     input clk,
 
-    input [31:0] strm_data, input [7:0] strm_count,
+    input [7:0] strm_data, input [9:0] strm_count,
     input [3:0] strm_id, input strm_avail, output strm_pull,
 
     output reg [3:0] send_id,
@@ -18,11 +18,10 @@ module msgencode (
     localparam SCAN_CHAR = 8'h7e;
 
     // Message generation state tracking
-    localparam SEND_IDLE=4'd0, SEND_HDR=4'd1, SEND_SEQ=4'd2, SEND_COUNT=4'd3,
-               SEND_DATA0=4'd4, SEND_DATA1=4'd5, SEND_DATA2=4'd6,
-               SEND_DATA3=4'd7, SEND_CRC0=4'd8, SEND_CRC1=4'd9, SEND_TERM=4'd10;
-    reg [3:0] send_state = SEND_IDLE;
-    reg [7:0] send_count;
+    localparam SEND_IDLE=3'd0, SEND_HDR=3'd1, SEND_SEQ=3'd2, SEND_DATALEN=3'd3,
+               SEND_DATA=3'd4, SEND_CRC0=3'd5, SEND_CRC1=3'd6, SEND_TERM=3'd7;
+    reg [2:0] send_state = SEND_IDLE;
+    reg [9:0] send_count;
     reg [5:0] send_seq;
     always @(posedge clk) begin
         if (send_state == SEND_IDLE) begin
@@ -35,23 +34,23 @@ module msgencode (
             end
         end else if (tx_pull) begin
             // A byte was sent, advance to next byte to send
-            if (send_state == SEND_DATA3)
+            if (send_state == SEND_DATA)
                 send_count <= send_count - 1'b1;
 
             if (send_state == SEND_TERM)
                 send_state <= SEND_IDLE;
-            else if (send_state == SEND_DATA3 && send_count != 1)
-                send_state <= SEND_DATA0;
+            else if (send_state == SEND_DATA && send_count != 1)
+                send_state <= SEND_DATA;
             else
                 send_state <= send_state + 1'b1;
         end
     end
 
-    // Pull 32bits of data from incoming stream
-    assign strm_pull = tx_pull && (send_state == SEND_COUNT
-                                   || (send_state == SEND_DATA3
+    // Pull data from incoming stream
+    assign strm_pull = tx_pull && (send_state == SEND_DATALEN
+                                   || (send_state == SEND_DATA
                                        && send_count != 1));
-    reg [31:0] send_data;
+    reg [7:0] send_data;
     always @(posedge clk)
         if (strm_pull)
             send_data <= strm_data;
@@ -68,16 +67,13 @@ module msgencode (
     // Tx data generation
     always @(*) begin
         case (send_state)
-        SEND_HDR:   tx_data = { 4'b0110, send_id };
-        SEND_SEQ:   tx_data = send_seq;
-        SEND_COUNT: tx_data = send_count[7:0];
-        SEND_DATA0: tx_data = send_data[7:0];
-        SEND_DATA1: tx_data = send_data[15:8];
-        SEND_DATA2: tx_data = send_data[23:16];
-        SEND_DATA3: tx_data = send_data[31:24];
-        SEND_CRC0:  tx_data = send_crc[15:8];
-        SEND_CRC1:  tx_data = send_crc[7:0];
-        default:    tx_data = SCAN_CHAR;
+        SEND_HDR:     tx_data = { 4'b0110, send_id };
+        SEND_SEQ:     tx_data = { send_count[1:0], send_seq };
+        SEND_DATALEN: tx_data = send_count[9:2];
+        SEND_DATA:    tx_data = send_data;
+        SEND_CRC0:    tx_data = send_crc[15:8];
+        SEND_CRC1:    tx_data = send_crc[7:0];
+        default:      tx_data = SCAN_CHAR;
         endcase
     end
     assign tx_avail = send_state != SEND_IDLE;

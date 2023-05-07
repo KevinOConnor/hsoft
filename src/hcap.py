@@ -140,14 +140,18 @@ class SerialHandler:
         return bytes(bytearray(msg))
     def _handle_response(self, msgdata):
         # Got response to request
-        res = msgdata[0]
-        self.tx_seq = msgdata[1]
-        seq_err = msgdata[2]
+        if len(msgdata) != 2:
+            self._warn("Unexpected response length %d" % (len(msgdata),))
+            return
+        errseq = msgdata[0]
+        res = msgdata[1]
+        self.tx_seq = errseq & 0x3f
+        err = errseq & 0x80
         if self.cmd is None:
             self._warn("Unexpected message response (seq %d)"
                        % (self.tx_seq,))
             return
-        if seq_err:
+        if err:
             # Sequence number mismatch
             if not self.no_seq_warnings:
                 self._warn("Send sequence mismatch (seq %d vs %d)"

@@ -12,7 +12,7 @@ module sampleq #(
     input [31:0] sample, input sample_avail, output reg active,
     input trigger,
 
-    output [31:0] samp_stream_data, output reg [7:0] samp_stream_count,
+    output reg [7:0] samp_stream_data, output reg [9:0] samp_stream_count,
     output reg samp_stream_avail, input samp_stream_pull,
 
     input wb_stb_i, input wb_cyc_i, input wb_we_i,
@@ -99,15 +99,33 @@ module sampleq #(
 
     // Send extracted fifo data to command stream
     wire [7:0] fifo_diff_cap = fifo_diff > 255 ? 8'd255 : fifo_diff[7:0];
+    wire [7:0] sq_count = (fifo_diff_cap > frame_count
+                           ? frame_count[7:0] : fifo_diff_cap);
     always @(posedge clk)
-        samp_stream_count <= (fifo_diff_cap > frame_count
-                              ? frame_count[7:0] : fifo_diff_cap);
+        samp_stream_count <= { sq_count, 2'b0 };
     wire can_pull = have_frame && fifo_diff != 0;
     always @(posedge clk)
         samp_stream_avail <= can_pull && (!active || fifo_diff_cap >= 120
                                           || fifo_diff_cap > frame_count);
-    assign is_sample_pull = can_pull && samp_stream_pull;
-    assign samp_stream_data = sfifo_rdata;
+    reg [1:0] stream_byte_pos = 0;
+    always @(posedge clk)
+        if (samp_stream_pull)
+            stream_byte_pos <= stream_byte_pos + 1'b1;
+    assign is_sample_pull = (can_pull && samp_stream_pull
+                             && stream_byte_pos == 0);
+    reg [31:0] send_cache; // sfifo read takes 2 cycles, so must stagger reads
+    always @(posedge clk)
+        if (stream_byte_pos == 0
+            || (samp_stream_pull && stream_byte_pos == 3))
+            send_cache <= sfifo_rdata;
+    always @(*) begin
+        case (stream_byte_pos)
+        default: samp_stream_data = send_cache[7:0];
+        1: samp_stream_data = send_cache[15:8];
+        2: samp_stream_data = send_cache[23:16];
+        3: samp_stream_data = send_cache[31:24];
+        endcase
+    end
     assign sfifo_ravail = have_frame; // Avoids read/write to same addr
     assign sfifo_raddr = fifo_pull_ptr;
 
