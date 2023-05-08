@@ -56,41 +56,29 @@ module sampleq #(
     end
     assign sfifo_waddr = fifo_push_ptr;
 
-    // Stream data out of fifo
+    // Is there an available "frame" to be sent to host?
+    wire is_new_trigger, is_frame_completed;
+    reg have_frame;
+    always @(posedge clk) begin
+        if (is_new_trigger)
+            have_frame <= 1;
+        else if (is_frame_completed)
+            have_frame <= 0;
+    end
+
+    // Manage fifo pull position
     reg [31:0] fifo_pull_counter;
+    reg [ADDR_W-1:0] fifo_pull_ptr;
     wire [31:0] fifo_diff32 = fifo_push_counter - fifo_pull_counter;
     wire [ADDR_W-1:0] fifo_diff = fifo_diff32[ADDR_W-1:0];
-    wire [7:0] fifo_diff_cap = fifo_diff > 255 ? 8'd255 : fifo_diff[7:0];
-    reg [31:0] frame_count;
-    always @(posedge clk)
-        samp_stream_count <= (fifo_diff_cap > frame_count
-                              ? frame_count[7:0] : fifo_diff_cap);
-    assign samp_stream_data = sfifo_rdata;
-    reg have_frame;
-    wire can_pull = have_frame && fifo_diff != 0;
-    reg samp_stream_raw_avail;
-    always @(posedge clk) begin
-        samp_stream_raw_avail <= can_pull;
-        samp_stream_avail <= can_pull && (!active || fifo_diff_cap >= 120
-                                          || fifo_diff_cap > frame_count);
-    end
-    assign sfifo_ravail = have_frame; // Avoids read/write to same addr
-    reg [ADDR_W-1:0] fifo_pull_ptr;
-    assign sfifo_raddr = fifo_pull_ptr;
-    wire is_new_trigger;
     reg [ADDR_W-1:0] frame_preface;
     wire [ADDR_W:0] next_trigger_pull_ptr = fifo_push_ptr - frame_preface;
     wire [31:0] wrap_pull_ptr = QUEUE_SIZE + next_trigger_pull_ptr;
     reg [31:0] frame_size;
+    reg [31:0] frame_count;
+    wire is_sample_pull;
     always @(posedge clk) begin
-        if (samp_stream_raw_avail && samp_stream_pull) begin
-            fifo_pull_counter <= fifo_pull_counter + 1;
-            if (fifo_pull_ptr + 1 != QUEUE_SIZE)
-                fifo_pull_ptr <= fifo_pull_ptr + 1'b1;
-            else
-                fifo_pull_ptr <= 0;
-            frame_count <= frame_count - 1;
-        end else if (is_new_trigger) begin
+        if (is_new_trigger) begin
             fifo_pull_counter <= fifo_push_counter - frame_preface;
             if (next_trigger_pull_ptr[ADDR_W])
                 // Queue rollover - set ptr relative to end of queue
@@ -98,14 +86,33 @@ module sampleq #(
             else
                 fifo_pull_ptr <= next_trigger_pull_ptr[ADDR_W-1:0];
             frame_count <= frame_size;
+        end else if (is_sample_pull) begin
+            fifo_pull_counter <= fifo_pull_counter + 1;
+            if (fifo_pull_ptr + 1 != QUEUE_SIZE)
+                fifo_pull_ptr <= fifo_pull_ptr + 1'b1;
+            else
+                fifo_pull_ptr <= 0;
+            frame_count <= frame_count - 1;
         end
     end
+    assign is_frame_completed = !frame_count || (!active && !fifo_diff);
+
+    // Send extracted fifo data to command stream
+    wire [7:0] fifo_diff_cap = fifo_diff > 255 ? 8'd255 : fifo_diff[7:0];
+    always @(posedge clk)
+        samp_stream_count <= (fifo_diff_cap > frame_count
+                              ? frame_count[7:0] : fifo_diff_cap);
+    wire can_pull = have_frame && fifo_diff != 0;
+    reg samp_stream_raw_avail;
     always @(posedge clk) begin
-        if (have_frame && (!frame_count || (!active && !fifo_diff)))
-            have_frame <= 0;
-        else if (is_new_trigger)
-            have_frame <= 1;
+        samp_stream_raw_avail <= can_pull;
+        samp_stream_avail <= can_pull && (!active || fifo_diff_cap >= 120
+                                          || fifo_diff_cap > frame_count);
     end
+    assign is_sample_pull = samp_stream_raw_avail && samp_stream_pull;
+    assign samp_stream_data = sfifo_rdata;
+    assign sfifo_ravail = have_frame; // Avoids read/write to same addr
+    assign sfifo_raddr = fifo_pull_ptr;
 
     // Trigger and active tracking
     wire is_command_set_status;
