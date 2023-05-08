@@ -8,7 +8,7 @@ module msgencode (
     input clk,
 
     input [31:0] strm_data, input [7:0] strm_count,
-    input [3:0] strm_id, input strm_avail, output reg strm_pull,
+    input [3:0] strm_id, input strm_avail, output strm_pull,
 
     output reg [3:0] send_id,
 
@@ -48,14 +48,12 @@ module msgencode (
     end
 
     // Pull 32bits of data from incoming stream
-    wire need_strm_pull = tx_pull && (send_state == SEND_COUNT
-                                      || (send_state == SEND_DATA3
-                                          && send_count != 1));
-    always @(posedge clk)
-        strm_pull <= need_strm_pull;
+    assign strm_pull = tx_pull && (send_state == SEND_COUNT
+                                   || (send_state == SEND_DATA3
+                                       && send_count != 1));
     reg [31:0] send_data;
     always @(posedge clk)
-        if (need_strm_pull)
+        if (strm_pull)
             send_data <= strm_data;
 
     // Message CRC
