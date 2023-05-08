@@ -64,9 +64,9 @@ There are several major components in the project code:
 
 - Samples queue.  The "samples queue" is an internal circular buffer
   used to store measurements.  It is implemented using the FPGA's
-  internal memory.  Each "sample" in the "samples queue" is a 32-bit
+  internal memory.  Each "sample" in the "samples queue" is a 72-bit
   value containing data from a single source.  Since each ADC channel
-  has 8-bits, a single 32bit entry is obtained by combining multiple
+  has 8-bits, a single 72bit entry is obtained by combining multiple
   measurements from that channel.  Data from the "samples queue" is
   forwarded to the host on a "trigger event".  The samples are sent
   using the command interface's message "stream" mechanism.  Code in
@@ -88,7 +88,7 @@ modules.
   on the main 125Mhz FPGA clock.
 
 - The data is then processed by the `sampleq/sampadcacc.v` module.
-  This module accumulates multiple readings into a 32-bit "sample
+  This module accumulates multiple readings into a 72-bit "sample
   entry".
 
 - Once a sample becomes available it is prioritized (by the

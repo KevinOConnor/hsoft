@@ -5,16 +5,17 @@
 // This file may be distributed under the terms of the GNU GPLv3 license.
 
 module sampselect #(
-    parameter NUM_SOURCES = 1
+    parameter NUM_SOURCES = 1,
+    parameter SAMPLE_W = 72
     )(
     input clk, input sq_active,
-    output reg [31:0] sample, output reg sample_avail,
+    output reg [SAMPLE_W-1:0] sample, output reg sample_avail,
 
-    input [32*NUM_SOURCES-1:0] sources, input [NUM_SOURCES-1:0] avails
+    input [SAMPLE_W*NUM_SOURCES-1:0] sources, input [NUM_SOURCES-1:0] avails
     );
 
     // Storage for samples awaiting to be added to sample queue
-    reg [32*NUM_SOURCES-1:0] data, next_data;
+    reg [SAMPLE_W*NUM_SOURCES-1:0] data, next_data;
     reg [NUM_SOURCES-1:0] have_data, next_have_data;
     always @(posedge clk) begin
         data <= next_data;
@@ -37,12 +38,12 @@ module sampselect #(
                 // Send this sample to the queue
                 sample_avail = 1;
                 next_have_data[i] = 0;
-                sample = data[i*32 +: 32];
+                sample = data[i*SAMPLE_W +: SAMPLE_W];
             end
 
             if (avails[i]) begin
                 // New sample needs to be added to local storage
-                next_data[i*32 +: 32] = sources[i*32 +: 32];
+                next_data[i*SAMPLE_W+:SAMPLE_W] = sources[i*SAMPLE_W+:SAMPLE_W];
                 next_have_data[i] = 1;
             end
         end

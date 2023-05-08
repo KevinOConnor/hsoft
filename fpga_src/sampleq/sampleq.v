@@ -5,11 +5,12 @@
 // This file may be distributed under the terms of the GNU GPLv3 license.
 
 module sampleq #(
-    parameter QUEUE_SIZE = 8192
+    parameter QUEUE_SIZE = 128,
+    parameter SAMPLE_W = 72
     )(
     input clk,
 
-    input [31:0] sample, input sample_avail, output reg active,
+    input [SAMPLE_W-1:0] sample, input sample_avail, output reg active,
     input trigger,
 
     output reg [7:0] samp_stream_data, output [9:0] samp_stream_count,
@@ -26,14 +27,15 @@ module sampleq #(
 
     // Memory storage for samples
     wire [ADDR_W-1:0] sfifo_raddr;
-    wire [31:0] sfifo_rdata;
+    wire [SAMPLE_W-1:0] sfifo_rdata;
     wire sfifo_ravail;
     wire [ADDR_W-1:0] sfifo_waddr;
-    wire [31:0] sfifo_wdata;
+    wire [SAMPLE_W-1:0] sfifo_wdata;
     wire sfifo_wavail;
     sampfifo #(
-        .ADDR_W(ADDR_W),
-        .QUEUE_SIZE(QUEUE_SIZE)
+        .QUEUE_SIZE(QUEUE_SIZE),
+        .SAMPLE_W(SAMPLE_W),
+        .ADDR_W(ADDR_W)
         ) sample_fifo(
         .clk(clk),
         .raddr(sfifo_raddr), .rdata(sfifo_rdata), .ravail(sfifo_ravail),
@@ -102,22 +104,24 @@ module sampleq #(
     always @(posedge clk)
         avail_fifo_count = (fifo_diff > frame_count
                             ? frame_count[ADDR_W-1:0] : fifo_diff);
-    assign samp_stream_count = (avail_fifo_count > 255 ? 8'd255
-                                : avail_fifo_count[7:0]) * 10'd4;
+    assign samp_stream_count = (avail_fifo_count > 96 ? 8'd96
+                                : avail_fifo_count[7:0]) * 10'd9;
     wire can_pull = have_frame && fifo_diff != 0;
     always @(posedge clk)
-        samp_stream_avail <= can_pull && (!active || fifo_diff >= 120
+        samp_stream_avail <= can_pull && (!active || fifo_diff >= 48
                                           || fifo_diff > frame_count);
-    reg [1:0] stream_byte_pos = 0;
+    localparam LAST_BYTE = (SAMPLE_W / 8) - 1;
+    reg [3:0] stream_byte_pos = 0;
     always @(posedge clk)
         if (samp_stream_pull)
-            stream_byte_pos <= stream_byte_pos + 1'b1;
+            stream_byte_pos <= (stream_byte_pos == LAST_BYTE ? 1'b0
+                                : stream_byte_pos + 1'b1);
     assign is_sample_pull = (can_pull && samp_stream_pull
                              && stream_byte_pos == 0);
-    reg [31:0] send_cache; // sfifo read takes 2 cycles, so must stagger reads
+    reg [SAMPLE_W-1:0] send_cache; // sfifo read takes 2 cycles - stagger reads
     always @(posedge clk)
         if (stream_byte_pos == 0
-            || (samp_stream_pull && stream_byte_pos == 3))
+            || (samp_stream_pull && stream_byte_pos == LAST_BYTE))
             send_cache <= sfifo_rdata;
     always @(*) begin
         case (stream_byte_pos)
@@ -125,6 +129,11 @@ module sampleq #(
         1: samp_stream_data = send_cache[15:8];
         2: samp_stream_data = send_cache[23:16];
         3: samp_stream_data = send_cache[31:24];
+        4: samp_stream_data = send_cache[39:32];
+        5: samp_stream_data = send_cache[47:40];
+        6: samp_stream_data = send_cache[55:48];
+        7: samp_stream_data = send_cache[63:56];
+        8: samp_stream_data = send_cache[71:64];
         endcase
     end
     assign sfifo_ravail = have_frame; // Avoids read/write to same addr

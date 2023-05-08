@@ -116,10 +116,11 @@ module haasoscope (
         );
 
     // External MAX19506 ADCs
+    localparam SAMPLE_W = 72;
     wire sq_active;
     assign pin_extadc1_clk = clk;
     wire ch0_trigger;
-    wire [31:0] extadc_ch0_sample;
+    wire [SAMPLE_W-1:0] extadc_ch0_sample;
     wire extadc_ch0_sample_avail;
     wire ch0_wb_stb_i, ch0_wb_cyc_i, ch0_wb_we_i;
     wire [15:0] ch0_wb_adr_i;
@@ -140,7 +141,7 @@ module haasoscope (
         .wb_dat_o(ch0_wb_dat_o), .wb_ack_o(ch0_wb_ack_o)
         );
     wire ch1_trigger;
-    wire [31:0] extadc_ch1_sample;
+    wire [SAMPLE_W-1:0] extadc_ch1_sample;
     wire extadc_ch1_sample_avail;
     wire ch1_wb_stb_i, ch1_wb_cyc_i, ch1_wb_we_i;
     wire [15:0] ch1_wb_adr_i;
@@ -162,7 +163,7 @@ module haasoscope (
         );
     assign pin_extadc2_clk = phased_clk;
     wire ch2_trigger;
-    wire [31:0] extadc_ch2_sample;
+    wire [SAMPLE_W-1:0] extadc_ch2_sample;
     wire extadc_ch2_sample_avail;
     wire ch2_wb_stb_i, ch2_wb_cyc_i, ch2_wb_we_i;
     wire [15:0] ch2_wb_adr_i;
@@ -183,7 +184,7 @@ module haasoscope (
         .wb_dat_o(ch2_wb_dat_o), .wb_ack_o(ch2_wb_ack_o)
         );
     wire ch3_trigger;
-    wire [31:0] extadc_ch3_sample;
+    wire [SAMPLE_W-1:0] extadc_ch3_sample;
     wire extadc_ch3_sample_avail;
     wire ch3_wb_stb_i, ch3_wb_cyc_i, ch3_wb_we_i;
     wire [15:0] ch3_wb_adr_i;
@@ -212,7 +213,7 @@ module haasoscope (
         .clk(clk), .sq_trigger(sq_trigger),
         .triggers({ch3_trigger, ch2_trigger, ch1_trigger, ch0_trigger})
         );
-    wire [31:0] sq_sample;
+    wire [SAMPLE_W-1:0] sq_sample;
     wire sq_sample_avail;
     sampselect #(
         .NUM_SOURCES(4)
@@ -225,13 +226,14 @@ module haasoscope (
         .avails({extadc_ch3_sample_avail, extadc_ch2_sample_avail,
                  extadc_ch1_sample_avail, extadc_ch0_sample_avail})
         );
+    localparam SAMPLES_PER_9KB_BLOCK = (9 * 1024) / SAMPLE_W;
     wire sq_wb_stb_i, sq_wb_cyc_i, sq_wb_we_i;
     wire [15:0] sq_wb_adr_i;
     wire [7:0] sq_wb_dat_i;
     wire [7:0] sq_wb_dat_o;
     wire sq_wb_ack_o;
     sampleq #(
-        .QUEUE_SIZE(10240)
+        .QUEUE_SIZE(42 * SAMPLES_PER_9KB_BLOCK)
         ) sample_queue(
         .clk(clk),
         .sample(sq_sample), .sample_avail(sq_sample_avail), .active(sq_active),

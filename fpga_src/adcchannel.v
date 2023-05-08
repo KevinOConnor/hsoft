@@ -4,13 +4,15 @@
 //
 // This file may be distributed under the terms of the GNU GPLv3 license.
 
-module adcchannel (
+module adcchannel #(
+    parameter SAMPLE_W = 72
+    )(
     input clk,
 
     input adc_clk, input [7:0] adc_ch,
 
     input sq_active, output sq_trigger,
-    output [31:0] sample, output sample_avail,
+    output [SAMPLE_W-1:0] sample, output sample_avail,
 
     input wb_stb_i, input wb_cyc_i, input wb_we_i,
     input [15:0] wb_adr_i,

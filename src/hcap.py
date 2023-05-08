@@ -426,8 +426,7 @@ class PLLPhase:
 # Mapping of bit resolution to fpga control code
 DEPOSIT_TYPES = {
     # num_bits: (measurements_per_sample, shift, code)
-    8: (4, 8, 0), 10: (3, 10, 1), 13: (2, 13, 2),
-    5: (6, 5, 3), 6: (5, 13, 6),
+    8: (9, 8, 0), 12: (6, 12, 1), 6: (12, 6, 2),
 }
 
 class SQHelper:
@@ -510,6 +509,7 @@ class SQHelper:
                    self.meas_mask, self.meas_base))
     def _parse_frame_data(self, frame_slot):
         # Map active channels
+        BYTES_PER_SAMPLE = 9
         interleave = self.interleave
         cmap = []
         hdr_desc = []
@@ -517,7 +517,7 @@ class SQHelper:
         for ch, ah in enumerate(self.af_helpers):
             hdr = "unused%d" % (ch,)
             if ah.check_is_capturing():
-                cmap.append((ah, ch, num_channels * 4))
+                cmap.append((ah, ch, num_channels * BYTES_PER_SAMPLE))
                 num_channels += 1
                 if not interleave or ch < 2:
                     hdr = "ch%d" % (ch,)
@@ -531,7 +531,7 @@ class SQHelper:
         # Skip unaligned reports at start and end of data
         frame_datas = self.frame_datas
         total_bytes = sum([len(fd) for fd in frame_datas])
-        sample_count = total_bytes // 4
+        sample_count = total_bytes // BYTES_PER_SAMPLE
         skip_start = (num_channels - (frame_slot % num_channels)) % num_channels
         sample_count -= skip_start
         sample_count -= sample_count % num_channels
@@ -541,7 +541,7 @@ class SQHelper:
         total_sample_groups = sample_count // num_channels
         total_lines = total_sample_groups * meas_per_sample
         sys.stdout.write("Total bytes %d (%d sample queue) %d lines (%.9fs)\n"
-                         % (total_bytes, total_bytes//4,
+                         % (total_bytes, total_bytes//BYTES_PER_SAMPLE,
                             total_lines, total_lines * stime))
         # CSV file header
         hdrs = ["; HSoft data capture '%s'" % (time.asctime(),)]
@@ -562,10 +562,10 @@ class SQHelper:
         frames_pos = 0
         line_data = [[0.] * 4 for i in range(meas_per_sample)]
         line_num = sample_group_num = 0
-        base_pos = skip_start * 4
+        base_pos = skip_start * BYTES_PER_SAMPLE
         while sample_group_num < total_sample_groups:
             # Check if need to extract more data
-            if len(frame_data) < base_pos + 4 * num_channels:
+            if len(frame_data) < base_pos + BYTES_PER_SAMPLE * num_channels:
                 if base_pos and len(frame_data) > base_pos:
                     frame_data[:base_pos] = []
                     base_pos = 0
@@ -575,15 +575,16 @@ class SQHelper:
             # Find measurements for this "group" of data
             for ah, ch, offset in cmap:
                 spos = base_pos + offset
-                d = (frame_data[spos] | (frame_data[spos+1] << 8)
-                     | (frame_data[spos+2] << 16) | (frame_data[spos+3] << 24))
-                d = d | (d << 32)
+                d = sum([frame_data[spos+i] << (8*i)
+                         for i in range(BYTES_PER_SAMPLE)])
+                d |= (d << (8*BYTES_PER_SAMPLE))
                 for j in range(meas_per_sample):
-                    m = (d >> ((j * meas_shift) & 0x1f)) & meas_mask
+                    m = (d >> ((j * meas_shift)
+                               % (8*BYTES_PER_SAMPLE))) & meas_mask
                     v = ah.calc_probe_volt(m * meas_mult)
                     line_data[meas_per_sample - 1 - j][ch] = v
             sample_group_num += 1
-            base_pos += 4 * num_channels
+            base_pos += BYTES_PER_SAMPLE * num_channels
             # Write line to csv file
             if interleave:
                 for ld in line_data:
@@ -636,7 +637,7 @@ class SQHelper:
                  / (meas_per_sample * self.channel_div))
         frame_size = max(16, min(0xffffffff, int(self.frame_time * qrate)))
         self.write_reg("sq", "frame_size", frame_size)
-        frame_prefix = max(8, min(0x1f00, int(self.preface_time * qrate)))
+        frame_prefix = max(8, min(0x1000, int(self.preface_time * qrate)))
         self.write_reg("sq", "frame_preface", frame_prefix)
         # Start sampling
         sys.stdout.write(" START SAMPLING\n")

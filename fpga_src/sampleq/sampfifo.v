@@ -5,16 +5,17 @@
 // This file may be distributed under the terms of the GNU GPLv3 license.
 
 module sampfifo #(
-    parameter ADDR_W = 13,
-    parameter QUEUE_SIZE = 8192
+    parameter QUEUE_SIZE = 128,
+    parameter SAMPLE_W = 72,
+    parameter ADDR_W = 13
     )(
     input clk,
-    input [ADDR_W-1:0] raddr, output reg [31:0] rdata, input ravail,
-    input [ADDR_W-1:0] waddr, input [31:0] wdata, input wavail
+    input [ADDR_W-1:0] raddr, output reg [SAMPLE_W-1:0] rdata, input ravail,
+    input [ADDR_W-1:0] waddr, input [SAMPLE_W-1:0] wdata, input wavail
     );
 
     /* synthesis syn_ramstyle = no_rw_check */
-    reg [31:0] mem [QUEUE_SIZE-1:0];
+    reg [SAMPLE_W-1:0] mem [QUEUE_SIZE-1:0];
 
     always @(posedge clk)
         if (ravail)

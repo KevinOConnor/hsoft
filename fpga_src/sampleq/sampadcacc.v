@@ -4,11 +4,13 @@
 //
 // This file may be distributed under the terms of the GNU GPLv3 license.
 
-module sampadcacc (
+module sampadcacc #(
+    parameter SAMPLE_W = 72
+    )(
     input clk,
     input [7:0] adc_ch, input sq_active,
 
-    output reg [31:0] sample, output reg sample_avail,
+    output reg [SAMPLE_W-1:0] sample, output reg sample_avail,
 
     input wb_stb_i, input wb_cyc_i, input wb_we_i,
     input [15:0] wb_adr_i,
@@ -39,26 +41,28 @@ module sampadcacc (
                               : (did_overflow ? sum_mask : raw_sum_with_mask));
 
     // Sample shifting
-    localparam SC_SHIFT8=0, SC_SHIFT10=1, SC_SHIFT13=2, SC_SHIFT5=3;
+    localparam SC_SHIFT8=0, SC_SHIFT12=1, SC_SHIFT6=2;
     wire [1:0] shift_type;
-    wire [31:0] sample_shift8 = { sample[23:0], sample[31:24] };
-    wire [31:0] sample_shift10 = { sample[21:0], sample[31:22] };
-    wire [31:0] sample_shift13 = { sample[18:0], sample[31:19] };
-    wire [31:0] sample_shift5 = { sample[26:0], sample[31:27] };
-    wire [31:0] sample_shift = (shift_type==SC_SHIFT10 ? sample_shift10
-                : (shift_type==SC_SHIFT13 ? sample_shift13
-                : (shift_type==SC_SHIFT5 ? sample_shift5 : sample_shift8)));
+    wire [SAMPLE_W-1:0] sample_shift8
+         = { sample[SAMPLE_W-9:0], sample[SAMPLE_W-1:SAMPLE_W-8] };
+    wire [SAMPLE_W-1:0] sample_shift12
+         = { sample[SAMPLE_W-13:0], sample[SAMPLE_W-1:SAMPLE_W-12] };
+    wire [SAMPLE_W-1:0] sample_shift6
+         = { sample[SAMPLE_W-7:0], sample[SAMPLE_W-1:SAMPLE_W-6] };
+    wire [SAMPLE_W-1:0] sample_shift = (shift_type==SC_SHIFT12 ? sample_shift12
+                : (shift_type==SC_SHIFT6 ? sample_shift6 : sample_shift8));
     wire [15:0] sample_shift_masked = sample_shift[15:0] & ~sum_mask;
     wire [15:0] sample_merged_low = sample_shift_masked | masked_sum;
-    wire [31:0] sample_merged = { sample_shift[31:16], sample_merged_low };
+    wire [SAMPLE_W-1:0] sample_merged
+         = { sample_shift[SAMPLE_W-1:16], sample_merged_low };
 
     // Collect data into a sample queue entry
     wire do_deposit;
     always @(posedge clk)
         if (do_deposit)
             sample <= sample_merged;
-    wire [2:0] deposit_cnt_start;
-    reg [2:0] deposit_cnt;
+    wire [3:0] deposit_cnt_start;
+    reg [3:0] deposit_cnt;
     always @(posedge clk) begin
         if (sq_active) begin
             if (do_deposit) begin
@@ -76,14 +80,11 @@ module sampadcacc (
         sample_avail <= enable && do_deposit && deposit_cnt == 0;
 
     // Configurable deposit types
-    localparam DT_4x8=SC_SHIFT8, DT_3x10=SC_SHIFT10, DT_2x13=SC_SHIFT13,
-               DT_6x5=SC_SHIFT5, DT_5x6=SC_SHIFT13 | 4;
-    reg [2:0] deposit_type;
+    localparam DT_9x8=SC_SHIFT8, DT_6x12=SC_SHIFT12, DT_12x6=SC_SHIFT6;
+    reg [1:0] deposit_type;
     assign shift_type = deposit_type[1:0];
-    assign deposit_cnt_start = (deposit_type == DT_3x10 ? 3'd2
-                               : (deposit_type == DT_2x13 ? 3'd1
-                               : (deposit_type == DT_6x5 ? 3'd5
-                               : (deposit_type == DT_5x6 ? 3'd4 : 3'd3))));
+    assign deposit_cnt_start = (deposit_type == DT_6x12 ? 4'd5
+                               : (deposit_type == DT_12x6 ? 4'd11 : 4'd8));
 
     // Track number of measurements to accumulate before depositing into sample
     reg [7:0] acc_cnt, cur_acc_cnt;
@@ -107,7 +108,7 @@ module sampadcacc (
         if (is_command_set_status && !sq_active) begin
             enable <= wb_dat_i[0];
             do_adc_add <= wb_dat_i[1];
-            deposit_type <= wb_dat_i[6:4];
+            deposit_type <= wb_dat_i[5:4];
         end
     wire is_command_set_acc_count;
     always @(posedge clk)

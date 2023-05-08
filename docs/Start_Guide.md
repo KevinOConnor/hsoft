@@ -101,7 +101,7 @@ Alternatively, one can run pulseview normally, select to open a
 
 # Extending the duration of captures
 
-The device can typically capture 80us of data from all four channels
+The device can typically capture 95us of data from all four channels
 at a 125Mhz capture rate.  One can reduce the amount of data captured
 to extend this time range.
 
@@ -120,12 +120,12 @@ data.  If averaging of measurements is not desired then it can be
 disabled with `--average 0`.
 
 It is also possible to change the number of bits per reported
-measurement using the `-b` option.  One can choose 13, 10, 8, 6, or 5
-bits per measurement (the default is 8 bits).  A lower bit rate
-results in more "coarse" data measurements, but can increase the
-capture duration time.  The use of 13 and 10 bits is available when a
-query rate less than 125Mhz is used - these bit sizes enable more
-precise reporting of the averaged measurements.
+measurement using the `-b` option.  One can choose 12, 8, or 6 bits
+per measurement (the default is 8 bits).  A lower bit rate results in
+more "coarse" data measurements, but can increase the capture duration
+time.  The use of 12 bits is available when a query rate less than
+125Mhz is used - this bit size enables more precise reporting of
+averaged measurements.
 
 Using the USB hi-speed adapter can also extend the total capture time.
 If the USB interface is able to extract measurements faster than they
