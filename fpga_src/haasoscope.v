@@ -226,14 +226,14 @@ module haasoscope (
         .avails({extadc_ch3_sample_avail, extadc_ch2_sample_avail,
                  extadc_ch1_sample_avail, extadc_ch0_sample_avail})
         );
-    localparam SAMPLES_PER_9KB_BLOCK = (9 * 1024) / SAMPLE_W;
+    localparam SAMPLES_PER_9KBIT_BLOCK = (9 * 1024) / SAMPLE_W;
     wire sq_wb_stb_i, sq_wb_cyc_i, sq_wb_we_i;
     wire [15:0] sq_wb_adr_i;
     wire [7:0] sq_wb_dat_i;
     wire [7:0] sq_wb_dat_o;
     wire sq_wb_ack_o;
     sampleq #(
-        .QUEUE_SIZE(42 * SAMPLES_PER_9KB_BLOCK)
+        .QUEUE_SIZE(42 * SAMPLES_PER_9KBIT_BLOCK)
         ) sample_queue(
         .clk(clk),
         .sample(sq_sample), .sample_avail(sq_sample_avail), .active(sq_active),
