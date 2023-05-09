@@ -54,7 +54,6 @@ module wbcmd (
                 // Incoming request had invalid sequence - send correct sequence
                 reply_state <= REPLY_DATA;
                 resp_data <= {1'b1, 1'b0, recv_seq};
-                reply_data <= 8'b0;
             end
         end else if (resp_pull) begin
             reply_state <= reply_state - 1'b1;
